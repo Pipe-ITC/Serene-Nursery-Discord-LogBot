@@ -95,3 +95,61 @@ test('blocks flower commands until the user has set a game name', async () => {
   assert.match(response.data.content, /run this command again/);
   assert.equal(queries.some((query) => query.includes('from flowers')), false);
 });
+
+test('returns public responses for public flower lookup commands', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'findpoints',
+        options: [{ name: 'points', value: 20 }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+
+        return [{ name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /Red Rose/);
+});
+
+test('setlevel announces a public fanfare when flowers are logged', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'level-user' } },
+      data: {
+        name: 'setlevel',
+        options: [{ name: 'level', value: 42 }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Level Legend' }];
+        }
+
+        const result = [];
+        result.count = query.includes('insert into flower_logs') ? 7 : 0;
+        return result;
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /FANFARE/);
+  assert.match(response.data.content, /level 42/);
+  assert.match(response.data.content, /7 assignment-level flowers/);
+});
