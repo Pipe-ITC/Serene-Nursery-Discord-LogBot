@@ -39,7 +39,7 @@ Required environment variable:
 DISCORD_PUBLIC_KEY
 ```
 
-The endpoint verifies Discord Ed25519 request signatures before handling interactions. It currently supports Discord PING verification and returns safe placeholder responses for future slash commands, autocomplete, components, and modals.
+The endpoint verifies Discord Ed25519 request signatures before handling interactions. It supports Discord PING verification, slash commands, autocomplete, select menus, and admin approval buttons.
 
 ## Discord Command Registration
 
@@ -80,8 +80,31 @@ Player commands:
 - `/del` removes one logged flower. Related pins are removed by the database cascade.
 - `/logall` opens a select menu for up to 25 flowers matching the provided text anywhere in the flower name.
 - `/setlevel` logs all flowers with an assignment level up to the provided level.
-- `/find`, `/findpoints`, `/points`, and `/info` read global flower, log, and pin data.
+- `/find`, `/findpoints`, `/findrarity`, `/points`, and `/info` read global flower, log, and pin data.
 - `/setname`, `/count`, `/pin`, and `/pinned` manage player profile, collection, and pin state.
+
+Players must run `/setname` before flower commands can log or search collection data. The bot blocks those actions until a game name is set.
+
+Public command responses:
+
+- `/find`
+- `/findpoints`
+- `/findrarity`
+- `/points`
+- `/info`
+- `/pinned`
+- `/setlevel`
+- `/pin`
+
+Private command responses:
+
+- `/log`
+- `/logall`
+- `/del`
+- `/help`
+- `/setname`
+- `/count`
+- admin workflows and admin errors
 
 Admin commands:
 
