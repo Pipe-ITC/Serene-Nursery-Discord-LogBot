@@ -151,8 +151,46 @@ test('findrarity lists flowers for a selected rarity publicly', async () => {
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, undefined);
   assert.match(response.data.content, /2 UR flowers found/);
-  assert.match(response.data.content, /Pink Rose/);
-  assert.match(response.data.content, /Starlight Lily/);
+  assert.match(response.data.embeds[0].description, /Pink Rose/);
+  assert.match(response.data.embeds[0].description, /Starlight Lily/);
+});
+
+test('findrarity does not truncate long rarity lists', async () => {
+  const flowers = Array.from({ length: 120 }, (_, index) => ({
+    name: `Ultra Flower ${String(index + 1).padStart(3, '0')}`,
+    rarity: 'UR',
+    quest_points: 100 + index,
+  }));
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'findrarity',
+        options: [{ name: 'rarity', value: 'UR' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+
+        return flowers;
+      },
+    },
+  );
+
+  const listedFlowers = response.data.embeds.map((embed) => embed.description).join('\n');
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /120 UR flowers found/);
+  assert.match(listedFlowers, /Ultra Flower 001/);
+  assert.match(listedFlowers, /Ultra Flower 120/);
+  assert.doesNotMatch(response.data.content, /and more results/);
+  assert.doesNotMatch(listedFlowers, /and more results/);
 });
 
 test('setlevel announces a public fanfare when flowers are logged', async () => {
