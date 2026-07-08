@@ -2,6 +2,12 @@
 
 Discord bot for logging and searching Cosy Florist flower collections in a private Discord server.
 
+## Branding Assets
+
+Discord app branding assets and Developer Portal copy live in [`branding/discord-app-branding.md`](branding/discord-app-branding.md).
+
+Use [`branding/serene-nursery-discord-app-icon-1024.png`](branding/serene-nursery-discord-app-icon-1024.png) as the Discord App Icon upload candidate.
+
 ## Postgres Deployment
 
 The Postgres deployment is configured for the Neon project:
