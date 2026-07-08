@@ -35,6 +35,35 @@ DISCORD_PUBLIC_KEY
 
 The endpoint verifies Discord Ed25519 request signatures before handling interactions. It currently supports Discord PING verification and returns safe placeholder responses for future slash commands, autocomplete, components, and modals.
 
+## Discord Command Registration
+
+Milestone 4 adds guild slash command registration for the private Discord server.
+
+Required environment variables:
+
+```text
+DISCORD_APPLICATION_ID
+DISCORD_BOT_TOKEN
+DISCORD_GUILD_ID
+```
+
+Register or update commands:
+
+```sh
+npm run discord:register
+```
+
+The command registration script writes guild commands, so updates should usually appear in Discord immediately.
+
+## Autocomplete
+
+Milestone 5 adds autocomplete for:
+
+- flower options: backed by the Neon `flowers` table
+- rarity options: `N`, `R`, `SR`, `SSR`, `UR`
+
+Flower autocomplete returns up to 25 choices and searches by normalized flower name, prioritizing exact and prefix-style matches.
+
 ## Database Migrations
 
 Install dependencies:

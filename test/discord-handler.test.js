@@ -9,7 +9,7 @@ test('responds to Discord ping interactions with pong', async () => {
   assert.deepEqual(response, { type: InteractionResponseType.PONG });
 });
 
-test('returns empty autocomplete choices until flower lookup is implemented', async () => {
+test('returns empty autocomplete choices when no option is focused', async () => {
   const response = await handleInteraction({
     type: InteractionType.APPLICATION_COMMAND_AUTOCOMPLETE,
     data: { name: 'list' },
