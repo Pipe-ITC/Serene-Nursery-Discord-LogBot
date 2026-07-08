@@ -68,6 +68,7 @@ test('shows admin commands to app admins in help output', async () => {
   assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
   assert.match(response.data.content, /\/log <flower>/);
   assert.match(response.data.content, /\/addflower/);
+  assert.match(response.data.content, /\/removeuser <user>/);
 });
 
 test('blocks flower commands until the user has set a game name', async () => {
@@ -404,6 +405,77 @@ test('addflower announces newly added flowers publicly', async () => {
   assert.match(response.data.content, /New flower added/);
   assert.match(response.data.content, /Moon Orchid/);
   assert.match(response.data.content, /available to log/);
+});
+
+test('removeuser deletes a player record and reports cascaded flower data', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'admin-1' } },
+      data: {
+        name: 'removeuser',
+        options: [{ name: 'user', value: 'target-user' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('select is_admin')) {
+          return [{ is_admin: true }];
+        }
+        if (query.includes('select discord_user_id, game_name, is_admin')) {
+          return [{ discord_user_id: 'target-user', game_name: 'Target Florist', is_admin: false }];
+        }
+        if (query.includes('select') && query.includes('flower_logs') && query.includes('flower_pins')) {
+          return [{ logged_flowers: 12, pins: 3 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Removed Target Florist/);
+  assert.match(response.data.content, /12 logged flowers/);
+  assert.match(response.data.content, /3 pins/);
+  assert.ok(queries.some((query) => query.includes('delete from app_users')));
+});
+
+test('removeuser blocks deleting app admins', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'admin-1' } },
+      data: {
+        name: 'removeuser',
+        options: [{ name: 'user', value: 'target-admin' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('select is_admin')) {
+          return [{ is_admin: true }];
+        }
+        if (query.includes('select discord_user_id, game_name, is_admin')) {
+          return [{ discord_user_id: 'target-admin', game_name: 'Admin Florist', is_admin: true }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Use \/removeadmin first/);
+  assert.ok(!queries.some((query) => query.includes('delete from app_users')));
 });
 
 test('addplayerflowers accepts a selected flower id from autocomplete', async () => {

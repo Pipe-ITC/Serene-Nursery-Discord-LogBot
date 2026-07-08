@@ -25,6 +25,7 @@ test('defines the expected private-server slash commands', () => {
       'pinned-players',
       'addadmin',
       'removeadmin',
+      'removeuser',
       'addplayerflowers',
     ],
   );
