@@ -6,7 +6,8 @@
   "scripts": {
     "db:migrate": "node scripts/db/migrate.mjs",
     "db:status": "node scripts/db/status.mjs",
-    "db:seed:flowers": "node scripts/db/import-flowers.mjs \"Initial Flowers.csv\""
+    "db:seed:flowers": "node scripts/db/import-flowers.mjs \"Initial Flowers.csv\"",
+    "test": "node --test"
   },
   "dependencies": {
     "postgres": "^3.4.5"

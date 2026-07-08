@@ -17,6 +17,24 @@ For local development, set `DATABASE_URL` in `.env.local`. The local file is int
 
 For Vercel deployment, add `DATABASE_URL` as an environment variable for Production, Preview, and Development.
 
+## Discord Interaction Endpoint
+
+Milestone 3 adds a Vercel Function at:
+
+```text
+/api/interactions
+```
+
+Configure the Discord app interaction endpoint URL to the deployed Vercel URL plus `/api/interactions`.
+
+Required environment variable:
+
+```text
+DISCORD_PUBLIC_KEY
+```
+
+The endpoint verifies Discord Ed25519 request signatures before handling interactions. It currently supports Discord PING verification and returns safe placeholder responses for future slash commands, autocomplete, components, and modals.
+
 ## Database Migrations
 
 Install dependencies:
