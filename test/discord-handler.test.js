@@ -520,4 +520,5 @@ test('addplayerflowers accepts a selected flower id from autocomplete', async ()
   assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
   assert.match(response.data.content, /Select flowers to add/);
   assert.equal(response.data.components[0].components[0].options[0].label, 'Red Rose');
+  assert.equal(response.data.components[0].components[0].options[0].description, 'R, 20 quest points');
 });
