@@ -335,3 +335,71 @@ test('pending admin requests notify other app admins privately', async () => {
   assert.equal(dms[0].discordUserId, 'admin-2');
   assert.match(dms[0].content, /Please review/);
 });
+
+test('addflower reports duplicates privately without adding them', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'admin-1' } },
+      data: {
+        name: 'addflower',
+        options: [
+          { name: 'name', value: 'Red Rose' },
+          { name: 'rarity', value: 'R' },
+          { name: 'quest_points', value: 20 },
+        ],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('select is_admin')) {
+          return [{ is_admin: true }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /already exists/);
+  assert.match(response.data.content, /has not been added/);
+});
+
+test('addflower announces newly added flowers publicly', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'admin-1' } },
+      data: {
+        name: 'addflower',
+        options: [
+          { name: 'name', value: 'Moon Orchid' },
+          { name: 'rarity', value: 'SSR' },
+          { name: 'quest_points', value: 90 },
+        ],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('select is_admin')) {
+          return [{ is_admin: true }];
+        }
+        if (query.includes('insert into flowers')) {
+          return [{ id: 'flower-id' }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /New flower added/);
+  assert.match(response.data.content, /Moon Orchid/);
+  assert.match(response.data.content, /available to log/);
+});
