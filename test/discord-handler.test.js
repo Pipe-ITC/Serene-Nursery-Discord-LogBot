@@ -120,7 +120,7 @@ test('returns public responses for public flower lookup commands', async () => {
 
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, undefined);
-  assert.match(response.data.content, /Red Rose/);
+  assert.match(response.data.embeds[0].description, /Red Rose/);
 });
 
 test('findrarity lists flowers for a selected rarity publicly', async () => {
@@ -191,6 +191,35 @@ test('findrarity does not truncate long rarity lists', async () => {
   assert.match(listedFlowers, /Ultra Flower 120/);
   assert.doesNotMatch(response.data.content, /and more results/);
   assert.doesNotMatch(listedFlowers, /and more results/);
+});
+
+test('pinned uses embeds for public flower lists', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: { name: 'pinned' },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+
+        return [
+          { name: 'Blue Rose', rarity: 'R', quest_points: 20 },
+          { name: 'Gold Lily', rarity: 'SSR', quest_points: 80 },
+        ];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /Your pinned flowers \(2\):/);
+  assert.match(response.data.embeds[0].description, /Blue Rose/);
+  assert.match(response.data.embeds[0].description, /Gold Lily/);
 });
 
 test('setlevel announces a public fanfare when flowers are logged', async () => {
