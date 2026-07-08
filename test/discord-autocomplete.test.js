@@ -34,6 +34,46 @@ test('routes flower autocomplete to flower search dependency', async () => {
   assert.deepEqual(choices, [{ name: 'Result for rose', value: 'flower-id' }]);
 });
 
+test('routes flower pattern autocomplete to name-valued choices', async () => {
+  const calls = [];
+  const choices = await autocompleteForInteraction(
+    {
+      data: {
+        options: [{ name: 'flower_pattern', value: 'rose', focused: true }],
+      },
+    },
+    {
+      searchFlowerChoices: async (...args) => {
+        calls.push(args);
+        return [{ name: 'Red Rose (R, 20 pts)', value: 'Red Rose' }];
+      },
+    },
+  );
+
+  assert.deepEqual(calls, [['rose', 25, 'name']]);
+  assert.deepEqual(choices, [{ name: 'Red Rose (R, 20 pts)', value: 'Red Rose' }]);
+});
+
+test('flower search can return flower names as autocomplete values', async () => {
+  const choices = await autocompleteForInteraction(
+    {
+      data: {
+        options: [{ name: 'flower_pattern', value: 'rose', focused: true }],
+      },
+    },
+    {
+      searchFlowerChoices: async (_value, _limit, choiceValue) => [
+        {
+          name: 'Red Rose (R, 20 pts)',
+          value: choiceValue === 'name' ? 'Red Rose' : 'flower-id',
+        },
+      ],
+    },
+  );
+
+  assert.deepEqual(choices, [{ name: 'Red Rose (R, 20 pts)', value: 'Red Rose' }]);
+});
+
 test('returns rarity choices for focused rarity options', async () => {
   const choices = await autocompleteForInteraction({
     data: {

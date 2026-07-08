@@ -403,3 +403,47 @@ test('addflower announces newly added flowers publicly', async () => {
   assert.match(response.data.content, /Moon Orchid/);
   assert.match(response.data.content, /available to log/);
 });
+
+test('addplayerflowers accepts a selected flower id from autocomplete', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'admin-1' } },
+      data: {
+        name: 'addplayerflowers',
+        options: [
+          { name: 'user', value: 'target-user' },
+          { name: 'flower_pattern', value: 'f55b3515-6216-4dab-94ff-c8b91c093ff5' },
+        ],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('select is_admin')) {
+          return [{ is_admin: true }];
+        }
+        if (query.includes('select game_name')) {
+          return [{ game_name: 'Target Florist' }];
+        }
+        if (query.includes('where id::text')) {
+          return [
+            {
+              id: 'f55b3515-6216-4dab-94ff-c8b91c093ff5',
+              name: 'Red Rose',
+              rarity: 'R',
+              quest_points: 20,
+            },
+          ];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Select flowers to add/);
+  assert.equal(response.data.components[0].components[0].options[0].label, 'Red Rose');
+});
