@@ -251,6 +251,7 @@ test('setlevel announces a public fanfare when flowers are logged', async () => 
   assert.match(response.data.content, /FANFARE/);
   assert.match(response.data.content, /level 42/);
   assert.match(response.data.content, /7 assignment-level flowers/);
+  assert.equal(response.data.embeds[0].image.url, 'https://bot.serenenursery.pipeitc.dev/Levelled-Up_Embed.png');
 });
 
 test('direct admin promotion sends a private Discord notification', async () => {
