@@ -315,6 +315,43 @@ test('find uses status emojis for logged and pinned users', async () => {
   assert.doesNotMatch(response.data.content, /- Pin Florist/);
 });
 
+test('info renders logged by you as yes or no', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'info',
+        options: [{ name: 'flower', value: 'flower-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+        if (query.includes('logged_by_you')) {
+          return [{ logged_by_you: true, logged_count: 3, pinned_count: 1 }];
+        }
+        if (query.includes('from flower_logs l')) {
+          return [{ discord_user_id: 'first-user', game_name: 'First Florist' }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /Logged by you: Yes/);
+  assert.doesNotMatch(response.data.content, /Logged by you: true/);
+});
+
 test('findrarity lists flowers for a selected rarity publicly', async () => {
   const response = await handleInteraction(
     {
