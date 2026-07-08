@@ -30,10 +30,19 @@ test('defines the expected private-server slash commands', () => {
   );
 });
 
-test('marks flower and rarity string options as autocomplete-enabled', () => {
+test('marks only picker-style flower and rarity string options as autocomplete-enabled', () => {
   const serialized = JSON.stringify(discordCommands);
 
   assert.match(serialized, /"name":"flower","description":"Flower to log","required":true,"autocomplete":true/);
-  assert.match(serialized, /"name":"flower_pattern","description":"Text to match within flower names","required":true,"autocomplete":true/);
   assert.match(serialized, /"name":"rarity","description":"Flower rarity","required":false,"autocomplete":true/);
+
+  const flowerPatternOptions = discordCommands.flatMap((command) =>
+    (command.options ?? []).filter((option) => option.name === 'flower_pattern'),
+  );
+
+  assert.equal(flowerPatternOptions.length, 2);
+  assert.deepEqual(
+    flowerPatternOptions.map((option) => option.autocomplete),
+    [undefined, undefined],
+  );
 });
