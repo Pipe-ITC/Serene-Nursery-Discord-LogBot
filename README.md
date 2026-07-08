@@ -70,6 +70,28 @@ Milestone 5 adds autocomplete for:
 
 Flower autocomplete returns up to 25 choices and searches by normalized flower name, prioritizing exact and prefix-style matches.
 
+## Bot Commands
+
+Milestones 6 and 7 add database-backed command handling for the registered Discord slash commands.
+
+Player commands:
+
+- `/list` logs or updates one owned flower, with optional non-negative extra points.
+- `/rem` removes one logged flower. Related pins are removed by the database cascade.
+- `/listall` opens a select menu for up to 25 flowers matching the provided text anywhere in the flower name.
+- `/setlevel` logs all flowers with an assignment level up to the provided level.
+- `/find`, `/findpoints`, `/points`, and `/info` read global flower, log, and pin data.
+- `/setname`, `/count`, `/pin`, and `/pinned` manage player profile, collection, and pin state.
+
+Admin commands:
+
+- `/addflower`, `/pinned-flowers`, `/pinned-players`, and `/addplayerflowers` require app admin status.
+- `/addadmin` and `/removeadmin` use app-level admins only, not Discord server roles.
+- If only one app admin exists, `/addadmin` promotes directly. `/removeadmin` is blocked when it would remove the only admin.
+- If multiple app admins exist, admin changes create a public approval request that another app admin must approve or reject.
+
+Set `INITIAL_ADMIN_DISCORD_ID` in Vercel to bootstrap the first app admin. The code also accepts `APP_BOOTSTRAP_ADMIN_ID` or `DISCORD_BOOTSTRAP_ADMIN_ID` for the same purpose.
+
 ## Database Migrations
 
 Install dependencies:
