@@ -252,3 +252,86 @@ test('setlevel announces a public fanfare when flowers are logged', async () => 
   assert.match(response.data.content, /level 42/);
   assert.match(response.data.content, /7 assignment-level flowers/);
 });
+
+test('direct admin promotion sends a private Discord notification', async () => {
+  const dms = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'admin-1' } },
+      data: {
+        name: 'addadmin',
+        options: [{ name: 'user', value: 'target-user' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('select is_admin')) {
+          return [{ is_admin: true }];
+        }
+        if (query.includes('select count(*)')) {
+          return [{ count: 1 }];
+        }
+
+        return [];
+      },
+      dmSender: async (discordUserId, content) => {
+        dms.push({ discordUserId, content });
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Promoted/);
+  assert.deepEqual(dms, [
+    {
+      discordUserId: 'target-user',
+      content: 'You have been promoted to Serene Nursery app admin.',
+    },
+  ]);
+});
+
+test('pending admin requests notify other app admins privately', async () => {
+  const dms = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'admin-1' } },
+      data: {
+        name: 'addadmin',
+        options: [{ name: 'user', value: 'target-user' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('select is_admin')) {
+          return [{ is_admin: true }];
+        }
+        if (query.includes('select count(*)')) {
+          return [{ count: 2 }];
+        }
+        if (query.includes('insert into admin_approval_requests')) {
+          return [{ id: 'approval-1' }];
+        }
+        if (query.includes('select discord_user_id')) {
+          return [{ discord_user_id: 'admin-2' }];
+        }
+
+        return [];
+      },
+      dmSender: async (discordUserId, content) => {
+        dms.push({ discordUserId, content });
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /requested to promote/);
+  assert.equal(dms.length, 1);
+  assert.equal(dms[0].discordUserId, 'admin-2');
+  assert.match(dms[0].content, /Please review/);
+});

@@ -112,6 +112,7 @@ Admin commands:
 - `/addadmin` and `/removeadmin` use app-level admins only, not Discord server roles.
 - If only one app admin exists, `/addadmin` promotes directly. `/removeadmin` is blocked when it would remove the only admin.
 - If multiple app admins exist, admin changes create a public approval request that another app admin must approve or reject.
+- Admin promotions/removals send best-effort private Discord DMs to the affected user. Pending approval requests also DM other app admins when possible.
 
 Set `INITIAL_ADMIN_DISCORD_ID` in Vercel to bootstrap the first app admin. The code also accepts `APP_BOOTSTRAP_ADMIN_ID` or `DISCORD_BOOTSTRAP_ADMIN_ID` for the same purpose.
 
