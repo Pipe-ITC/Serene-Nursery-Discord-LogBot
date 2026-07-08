@@ -250,7 +250,8 @@ test('setlevel announces a public fanfare when flowers are logged', async () => 
   assert.equal(response.data.flags, undefined);
   assert.match(response.data.content, /FANFARE/);
   assert.match(response.data.content, /level 42/);
-  assert.match(response.data.content, /7 assignment-level flowers/);
+  assert.match(response.data.content, /The nursery gates swing wide: 7 assignment-level flowers logged in one glorious burst\./);
+  assert.match(response.data.content, /Trumpets up\. Petals everywhere\. Absolutely magnificent\./);
   assert.equal(response.data.embeds[0].image.url, 'https://bot.serenenursery.pipeitc.dev/Levelled-Up_Embed.png');
 });
 
