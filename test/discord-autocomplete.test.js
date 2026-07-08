@@ -81,13 +81,13 @@ test('returns rarity choices for focused rarity options', async () => {
     },
   });
 
-  assert.deepEqual(choices, [{ name: 'UR - Ultra Rare', value: 'UR' }]);
+  assert.deepEqual(choices, [{ name: '<:UR:1524529822653612255> - Ultra Rare', value: 'UR' }]);
 });
 
 test('filters rarity choices by code, label, or color', () => {
-  assert.deepEqual(rarityChoices('gold'), [{ name: 'SSR - SS Rare', value: 'SSR' }]);
+  assert.deepEqual(rarityChoices('gold'), [{ name: '<:SSR:1524529771227381941> - SS Rare', value: 'SSR' }]);
   assert.deepEqual(rarityChoices('sr'), [
-    { name: 'SR - Super Rare', value: 'SR' },
-    { name: 'SSR - SS Rare', value: 'SSR' },
+    { name: '<:SR:1524529711823454389> - Super Rare', value: 'SR' },
+    { name: '<:SSR:1524529771227381941> - SS Rare', value: 'SSR' },
   ]);
 });

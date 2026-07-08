@@ -151,7 +151,7 @@ test('findrarity lists flowers for a selected rarity publicly', async () => {
 
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, undefined);
-  assert.match(response.data.content, /2 UR flowers found/);
+  assert.match(response.data.content, /2 <:UR:1524529822653612255> flowers found/);
   assert.match(response.data.embeds[0].description, /Pink Rose/);
   assert.match(response.data.embeds[0].description, /Starlight Lily/);
 });
@@ -187,7 +187,7 @@ test('findrarity does not truncate long rarity lists', async () => {
 
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, undefined);
-  assert.match(response.data.content, /120 UR flowers found/);
+  assert.match(response.data.content, /120 <:UR:1524529822653612255> flowers found/);
   assert.match(listedFlowers, /Ultra Flower 001/);
   assert.match(listedFlowers, /Ultra Flower 120/);
   assert.doesNotMatch(response.data.content, /and more results/);
