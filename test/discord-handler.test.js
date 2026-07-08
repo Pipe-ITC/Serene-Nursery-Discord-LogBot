@@ -33,3 +33,39 @@ test('returns an ephemeral placeholder for unknown slash commands', async () => 
   assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
   assert.match(response.data.content, /\/unknown-command/);
 });
+
+test('hides admin commands from non-admin help output', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'user-1' } },
+      data: { name: 'help' },
+    },
+    {
+      sql: async () => [{ is_admin: false }],
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /\/list <flower>/);
+  assert.doesNotMatch(response.data.content, /\/addflower/);
+});
+
+test('shows admin commands to app admins in help output', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'admin-1' } },
+      data: { name: 'help' },
+    },
+    {
+      sql: async () => [{ is_admin: true }],
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /\/list <flower>/);
+  assert.match(response.data.content, /\/addflower/);
+});

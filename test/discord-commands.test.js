@@ -6,6 +6,7 @@ test('defines the expected private-server slash commands', () => {
   assert.deepEqual(
     discordCommands.map((command) => command.name),
     [
+      'help',
       'list',
       'rem',
       'listall',
