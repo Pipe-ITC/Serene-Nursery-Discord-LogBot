@@ -1,0 +1,15 @@
+{
+  "name": "serene-nursery-discord-logbot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "db:migrate": "node scripts/db/migrate.mjs",
+    "db:status": "node scripts/db/status.mjs",
+    "db:seed:flowers": "node scripts/db/import-flowers.mjs \"Initial Flowers.csv\""
+  },
+  "dependencies": {
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {}
+}
