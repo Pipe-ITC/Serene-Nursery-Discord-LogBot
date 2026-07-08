@@ -69,3 +69,29 @@ test('shows admin commands to app admins in help output', async () => {
   assert.match(response.data.content, /\/log <flower>/);
   assert.match(response.data.content, /\/addflower/);
 });
+
+test('blocks flower commands until the user has set a game name', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'user-without-name' } },
+      data: {
+        name: 'log',
+        options: [{ name: 'flower', value: 'rose-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        queries.push(strings.join(' '));
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /\/setname/);
+  assert.match(response.data.content, /run this command again/);
+  assert.equal(queries.some((query) => query.includes('from flowers')), false);
+});
