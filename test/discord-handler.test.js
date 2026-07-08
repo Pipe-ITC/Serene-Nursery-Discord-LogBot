@@ -97,6 +97,86 @@ test('blocks flower commands until the user has set a game name', async () => {
   assert.equal(queries.some((query) => query.includes('from flowers')), false);
 });
 
+test('log stores a flower the first time it is logged', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'log',
+        options: [
+          { name: 'flower', value: 'flower-id' },
+          { name: 'extra_points', value: 1 },
+        ],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+        if (query.includes('insert into flower_logs')) {
+          const result = [{ id: 'log-id' }];
+          result.count = 1;
+          return result;
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Logged Red Rose/);
+  assert.match(response.data.content, /with \+1 extra points/);
+  assert.match(response.data.content, /Total for you: 21/);
+  assert.ok(queries.some((query) => query.includes('insert into flower_logs')));
+});
+
+test('log warns when the flower has already been logged', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'log',
+        options: [{ name: 'flower', value: 'flower-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+        if (query.includes('from flower_logs') && query.includes('extra_points')) {
+          return [{ extra_points: 0 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /already logged Red Rose/);
+  assert.match(response.data.content, /\/addpoints/);
+  assert.equal(queries.some((query) => query.includes('insert into flower_logs')), false);
+});
+
 test('addpoints updates extra points for a previously logged flower', async () => {
   const response = await handleInteraction(
     {
