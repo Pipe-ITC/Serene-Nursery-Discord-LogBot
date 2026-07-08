@@ -415,6 +415,47 @@ test('pinned uses embeds for public flower lists', async () => {
   assert.doesNotMatch(response.data.embeds[0].description, /- Blue Rose/);
 });
 
+test('pinned user output uses a display name instead of a raw Discord id', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'pinned',
+        options: [{ name: 'user', value: 'target-user' }],
+        resolved: {
+          users: {
+            'target-user': {
+              username: 'discord_target',
+              global_name: 'Target Discord',
+            },
+          },
+        },
+      },
+    },
+    {
+      sql: async (strings, ...values) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users') && values.includes('target-user')) {
+          return [{ game_name: 'Target Florist' }];
+        }
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+
+        return [{ name: 'Blue Rose', rarity: 'R', quest_points: 20 }];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /Target Florist \(Target Discord\) pinned flowers \(1\):/);
+  assert.equal(response.data.embeds[0].title, 'Target Florist (Target Discord) pinned flowers');
+  assert.doesNotMatch(response.data.content, /target-user/);
+  assert.doesNotMatch(response.data.embeds[0].title, /target-user/);
+});
+
 test('setlevel announces a public fanfare when flowers are logged', async () => {
   const response = await handleInteraction(
     {
