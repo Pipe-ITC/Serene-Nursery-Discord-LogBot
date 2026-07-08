@@ -8,6 +8,7 @@ test('defines the expected private-server slash commands', () => {
     [
       'help',
       'log',
+      'addpoints',
       'del',
       'logall',
       'setlevel',

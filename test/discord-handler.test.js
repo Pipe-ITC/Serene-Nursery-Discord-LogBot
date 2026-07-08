@@ -97,6 +97,77 @@ test('blocks flower commands until the user has set a game name', async () => {
   assert.equal(queries.some((query) => query.includes('from flowers')), false);
 });
 
+test('addpoints updates extra points for a previously logged flower', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'addpoints',
+        options: [
+          { name: 'flower', value: 'flower-id' },
+          { name: 'points', value: 4 },
+        ],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+        if (query.includes('update flower_logs')) {
+          return [{ id: 'log-id' }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Updated Red Rose/);
+  assert.match(response.data.content, /\+4 extra points/);
+  assert.match(response.data.content, /Total for you: 24/);
+});
+
+test('addpoints requires the flower to be logged first', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'addpoints',
+        options: [
+          { name: 'flower', value: 'flower-id' },
+          { name: 'points', value: 2 },
+        ],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /need to log Red Rose before/);
+});
+
 test('returns public responses for public flower lookup commands', async () => {
   const response = await handleInteraction(
     {
