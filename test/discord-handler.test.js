@@ -12,7 +12,7 @@ test('responds to Discord ping interactions with pong', async () => {
 test('returns empty autocomplete choices when no option is focused', async () => {
   const response = await handleInteraction({
     type: InteractionType.APPLICATION_COMMAND_AUTOCOMPLETE,
-    data: { name: 'list' },
+    data: { name: 'log' },
   });
 
   assert.deepEqual(response, {
@@ -48,7 +48,7 @@ test('hides admin commands from non-admin help output', async () => {
 
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
-  assert.match(response.data.content, /\/list <flower>/);
+  assert.match(response.data.content, /\/log <flower>/);
   assert.doesNotMatch(response.data.content, /\/addflower/);
 });
 
@@ -66,6 +66,6 @@ test('shows admin commands to app admins in help output', async () => {
 
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
-  assert.match(response.data.content, /\/list <flower>/);
+  assert.match(response.data.content, /\/log <flower>/);
   assert.match(response.data.content, /\/addflower/);
 });

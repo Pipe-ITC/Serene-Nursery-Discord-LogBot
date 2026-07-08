@@ -76,9 +76,9 @@ Milestones 6 and 7 add database-backed command handling for the registered Disco
 
 Player commands:
 
-- `/list` logs or updates one owned flower, with optional non-negative extra points.
-- `/rem` removes one logged flower. Related pins are removed by the database cascade.
-- `/listall` opens a select menu for up to 25 flowers matching the provided text anywhere in the flower name.
+- `/log` logs or updates one owned flower, with optional non-negative extra points.
+- `/del` removes one logged flower. Related pins are removed by the database cascade.
+- `/logall` opens a select menu for up to 25 flowers matching the provided text anywhere in the flower name.
 - `/setlevel` logs all flowers with an assignment level up to the provided level.
 - `/find`, `/findpoints`, `/points`, and `/info` read global flower, log, and pin data.
 - `/setname`, `/count`, `/pin`, and `/pinned` manage player profile, collection, and pin state.

@@ -7,9 +7,9 @@ test('defines the expected private-server slash commands', () => {
     discordCommands.map((command) => command.name),
     [
       'help',
-      'list',
-      'rem',
-      'listall',
+      'log',
+      'del',
+      'logall',
       'setlevel',
       'find',
       'findpoints',
