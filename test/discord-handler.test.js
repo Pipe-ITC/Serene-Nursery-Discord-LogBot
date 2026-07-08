@@ -275,6 +275,46 @@ test('returns public responses for public flower lookup commands', async () => {
   assert.match(response.data.embeds[0].description, /Red Rose/);
 });
 
+test('find uses status emojis for logged and pinned users', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'find',
+        options: [{ name: 'flower', value: 'flower-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+        if (query.includes('from flower_logs l')) {
+          return [{ discord_user_id: 'owner-user', game_name: 'Owner Florist', extra_points: 2 }];
+        }
+        if (query.includes('from flower_pins p')) {
+          return [{ discord_user_id: 'pinner-user', game_name: 'Pin Florist' }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /✅ Owner Florist/);
+  assert.match(response.data.content, /extra \+2/);
+  assert.match(response.data.content, /📌 Pin Florist/);
+  assert.doesNotMatch(response.data.content, /- Owner Florist/);
+  assert.doesNotMatch(response.data.content, /- Pin Florist/);
+});
+
 test('findrarity lists flowers for a selected rarity publicly', async () => {
   const response = await handleInteraction(
     {
@@ -370,8 +410,9 @@ test('pinned uses embeds for public flower lists', async () => {
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, undefined);
   assert.match(response.data.content, /Your pinned flowers \(2\):/);
-  assert.match(response.data.embeds[0].description, /Blue Rose/);
-  assert.match(response.data.embeds[0].description, /Gold Lily/);
+  assert.match(response.data.embeds[0].description, /📌 Blue Rose/);
+  assert.match(response.data.embeds[0].description, /📌 Gold Lily/);
+  assert.doesNotMatch(response.data.embeds[0].description, /- Blue Rose/);
 });
 
 test('setlevel announces a public fanfare when flowers are logged', async () => {
