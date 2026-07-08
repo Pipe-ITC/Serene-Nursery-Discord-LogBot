@@ -13,6 +13,7 @@ test('defines the expected private-server slash commands', () => {
       'setlevel',
       'find',
       'findpoints',
+      'findrarity',
       'points',
       'info',
       'setname',

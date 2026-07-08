@@ -123,6 +123,38 @@ test('returns public responses for public flower lookup commands', async () => {
   assert.match(response.data.content, /Red Rose/);
 });
 
+test('findrarity lists flowers for a selected rarity publicly', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'findrarity',
+        options: [{ name: 'rarity', value: 'UR' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+
+        return [
+          { name: 'Pink Rose', rarity: 'UR', quest_points: 100 },
+          { name: 'Starlight Lily', rarity: 'UR', quest_points: 120 },
+        ];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /2 UR flowers found/);
+  assert.match(response.data.content, /Pink Rose/);
+  assert.match(response.data.content, /Starlight Lily/);
+});
+
 test('setlevel announces a public fanfare when flowers are logged', async () => {
   const response = await handleInteraction(
     {
