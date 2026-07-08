@@ -27,6 +27,12 @@ Milestone 3 adds a Vercel Function at:
 
 Configure the Discord app interaction endpoint URL to the deployed Vercel URL plus `/api/interactions`.
 
+Production endpoint:
+
+```text
+https://bot.serenenursery.pipeitc.dev/api/interactions
+```
+
 Required environment variable:
 
 ```text
