@@ -47,4 +47,13 @@ test('marks only picker-style flower and rarity string options as autocomplete-e
     flowerPatternOptions.map((option) => option.autocomplete),
     [undefined, undefined],
   );
+
+  const logallCommand = discordCommands.find((command) => command.name === 'logall');
+  assert.deepEqual(
+    logallCommand.options.map((option) => ({ name: option.name, required: option.required, autocomplete: option.autocomplete })),
+    [
+      { name: 'flower_pattern', required: false, autocomplete: undefined },
+      { name: 'rarity', required: false, autocomplete: true },
+    ],
+  );
 });

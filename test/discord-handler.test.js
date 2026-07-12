@@ -177,6 +177,132 @@ test('log warns when the flower has already been logged', async () => {
   assert.equal(queries.some((query) => query.includes('insert into flower_logs')), false);
 });
 
+test('logall uses flower pattern matching when the input is not an exact rarity', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'logall',
+        options: [{ name: 'flower_pattern', value: 'rose' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('where normalized_name like')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /for "rose"/);
+  assert.equal(response.data.components[0].components[0].options[0].label, 'Red Rose');
+});
+
+test('logall treats an exact rarity code in the pattern field as a rarity search', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'logall',
+        options: [{ name: 'flower_pattern', value: 'N' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('where rarity =')) {
+          return [{ id: 'flower-id', name: 'Green Rose', rarity: 'N', quest_points: 5 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /for "N rarity"/);
+  assert.equal(response.data.components[0].components[0].options[0].label, 'Green Rose');
+  assert.equal(queries.some((query) => query.includes('where normalized_name like')), false);
+});
+
+test('logall can search by the rarity option', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'logall',
+        options: [{ name: 'rarity', value: 'SSR' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('where rarity =')) {
+          return [{ id: 'flower-id', name: 'Gold Lily', rarity: 'SSR', quest_points: 80 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /for "SSR rarity"/);
+  assert.equal(response.data.components[0].components[0].options[0].label, 'Gold Lily');
+});
+
+test('logall rejects flower pattern and rarity together', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'logall',
+        options: [
+          { name: 'flower_pattern', value: 'rose' },
+          { name: 'rarity', value: 'N' },
+        ],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /either a flower pattern or a rarity/);
+});
+
 test('addpoints updates extra points for a previously logged flower', async () => {
   const response = await handleInteraction(
     {
