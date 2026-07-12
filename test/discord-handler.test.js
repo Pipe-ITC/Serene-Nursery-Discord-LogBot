@@ -273,6 +273,49 @@ test('logall can search by the rarity option', async () => {
   assert.equal(response.data.components[0].components[0].options[0].label, 'Gold Lily');
 });
 
+test('logall splits more than 25 flowers across multiple select menus', async () => {
+  const flowers = Array.from({ length: 60 }, (_, index) => ({
+    id: `flower-${index + 1}`,
+    name: `Normal Flower ${String(index + 1).padStart(2, '0')}`,
+    rarity: 'N',
+    quest_points: index + 1,
+  }));
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'logall',
+        options: [{ name: 'rarity', value: 'N' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('where rarity =')) {
+          return flowers;
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /60 matches/);
+  assert.equal(response.data.components.length, 3);
+  assert.equal(response.data.components[0].components[0].options.length, 25);
+  assert.equal(response.data.components[1].components[0].options.length, 25);
+  assert.equal(response.data.components[2].components[0].options.length, 10);
+  assert.match(response.data.components[0].components[0].placeholder, /\(1\/3\)/);
+  assert.match(response.data.components[2].components[0].placeholder, /\(3\/3\)/);
+  assert.equal(response.data.components[2].components[0].options[9].label, 'Normal Flower 60');
+});
+
 test('logall rejects flower pattern and rarity together', async () => {
   const response = await handleInteraction(
     {
