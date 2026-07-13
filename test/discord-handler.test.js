@@ -225,6 +225,82 @@ test('log warns when the flower has already been logged', async () => {
   assert.equal(queries.some((query) => query.includes('insert into flower_logs')), false);
 });
 
+test('log rejects supplied extra points outside the cozy bonus values', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'log',
+        options: [
+          { name: 'flower', value: 'flower-id' },
+          { name: 'extra_points', value: 5 },
+        ],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Extra points must be 1, 2, 3, or 4/);
+  assert.equal(queries.some((query) => query.includes('insert into flower_logs')), false);
+});
+
+test('log still allows omitted extra points as zero', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'log',
+        options: [{ name: 'flower', value: 'flower-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+        if (query.includes('count(*)') && query.includes('from flower_logs')) {
+          return [{ count: 1 }];
+        }
+        if (query.includes('insert into flower_logs')) {
+          return [{ id: 'log-id' }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Logged Red Rose/);
+  assert.match(response.data.content, /Total for you: 20/);
+  assert.ok(queries.some((query) => query.includes('insert into flower_logs')));
+});
+
 test('logall uses flower pattern matching when the input is not an exact rarity', async () => {
   const response = await handleInteraction(
     {
@@ -463,6 +539,42 @@ test('addpoints requires the flower to be logged first', async () => {
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
   assert.match(response.data.content, /need to log Red Rose before/);
+});
+
+test('addpoints rejects points outside the cozy bonus values', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'addpoints',
+        options: [
+          { name: 'flower', value: 'flower-id' },
+          { name: 'points', value: 0 },
+        ],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Extra points must be 1, 2, 3, or 4/);
+  assert.equal(queries.some((query) => query.includes('update flower_logs')), false);
 });
 
 test('returns public responses for public flower lookup commands', async () => {

@@ -57,3 +57,31 @@ test('marks only picker-style flower and rarity string options as autocomplete-e
     ],
   );
 });
+
+test('limits extra point command options to cozy bonus values', () => {
+  const logCommand = discordCommands.find((command) => command.name === 'log');
+  const addPointsCommand = discordCommands.find((command) => command.name === 'addpoints');
+
+  assert.deepEqual(
+    logCommand.options.find((option) => option.name === 'extra_points'),
+    {
+      type: 4,
+      name: 'extra_points',
+      description: 'Optional extra points added to this flower',
+      required: false,
+      min_value: 1,
+      max_value: 4,
+    },
+  );
+  assert.deepEqual(
+    addPointsCommand.options.find((option) => option.name === 'points'),
+    {
+      type: 4,
+      name: 'points',
+      description: 'Extra points to store for this flower',
+      required: true,
+      min_value: 1,
+      max_value: 4,
+    },
+  );
+});
