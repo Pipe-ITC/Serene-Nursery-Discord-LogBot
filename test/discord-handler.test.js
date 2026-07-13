@@ -536,15 +536,17 @@ test('find combines pinned and logged users in priority order', async () => {
   assert.doesNotMatch(response.data.content, /Logged by/);
   assert.doesNotMatch(response.data.content, /Pinned by/);
 
-  const pinnedExtraIndex = response.data.content.indexOf('📌 Pinned Extra Florist');
+  const pinnedExtraIndex = response.data.content.indexOf('<a:flashingexclamationemoji:1526190062105264259> Pinned Extra Florist');
   const pinnedIndex = response.data.content.indexOf('📌 Pinned Florist');
-  const loggedIndex = response.data.content.indexOf('✅ Logged Florist');
+  const loggedIndex = response.data.content.indexOf('<a:flashingexclamationemoji:1526190062105264259> Logged Florist');
 
   assert.ok(pinnedExtraIndex >= 0);
   assert.ok(pinnedIndex > pinnedExtraIndex);
   assert.ok(loggedIndex > pinnedIndex);
-  assert.match(response.data.content, /📌 Pinned Extra Florist .*<a:flashingexclamationemoji:1526190062105264259> \+3/);
-  assert.match(response.data.content, /✅ Logged Florist .*<a:flashingexclamationemoji:1526190062105264259> \+1/);
+  assert.match(response.data.content, /<a:flashingexclamationemoji:1526190062105264259> Pinned Extra Florist .*\+3/);
+  assert.match(response.data.content, /<a:flashingexclamationemoji:1526190062105264259> Logged Florist .*\+1/);
+  assert.doesNotMatch(response.data.content, /📌 Pinned Extra Florist/);
+  assert.doesNotMatch(response.data.content, /✅ Logged Florist/);
   assert.equal(response.data.content.match(/Pinned Extra Florist/g).length, 1);
 });
 
