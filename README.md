@@ -47,6 +47,22 @@ DISCORD_PUBLIC_KEY
 
 The endpoint verifies Discord Ed25519 request signatures before handling interactions. It supports Discord PING verification, slash commands, autocomplete, select menus, and admin approval buttons.
 
+## Weekly Done Reset
+
+Vercel Cron calls this endpoint every Monday at 10:00 UTC:
+
+```text
+/api/cron/donereset
+```
+
+Required environment variable:
+
+```text
+CRON_SECRET
+```
+
+The cron endpoint only accepts `GET` requests with `Authorization: Bearer $CRON_SECRET`. It clears the weekly `/done` markers by running the same reset helper as the admin-only `/donereset` command.
+
 ## Discord Command Registration
 
 Milestone 4 adds guild slash command registration for the private Discord server.

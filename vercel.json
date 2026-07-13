@@ -2,6 +2,15 @@
   "functions": {
     "api/interactions.js": {
       "maxDuration": 10
+    },
+    "api/cron/donereset.js": {
+      "maxDuration": 10
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/donereset",
+      "schedule": "0 10 * * 1"
+    }
+  ]
 }
