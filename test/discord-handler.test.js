@@ -70,6 +70,7 @@ test('shows admin commands to app admins in help output', async () => {
   assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
   assert.match(response.data.content, /\/log <flower>/);
   assert.match(response.data.content, /\/addflower/);
+  assert.match(response.data.content, /\/setflowerimage <flower> <image>/);
   assert.match(response.data.content, /\/removeuser <user>/);
   assert.match(response.data.content, /\/donereset/);
 });
@@ -749,6 +750,44 @@ test('info renders logged by you as yes or no', async () => {
   assert.doesNotMatch(response.data.content, /Logged by you: true/);
 });
 
+test('info displays a flower image when one is stored', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'info',
+        options: [{ name: 'flower', value: 'flower-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20, image_url: 'https://cdn.discordapp.com/flowers/red-rose.png' }];
+        }
+        if (query.includes('logged_by_you')) {
+          return [{ logged_by_you: false, logged_count: 3, pinned_count: 1 }];
+        }
+        if (query.includes('from flower_logs l')) {
+          return [{ discord_user_id: 'first-user', game_name: 'First Florist' }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /Logged by you: No/);
+  assert.equal(response.data.embeds[0].title, 'Red Rose');
+  assert.equal(response.data.embeds[0].image.url, 'https://cdn.discordapp.com/flowers/red-rose.png');
+});
+
 test('findrarity lists flowers for a selected rarity publicly', async () => {
   const response = await handleInteraction(
     {
@@ -1099,6 +1138,94 @@ test('addflower announces newly added flowers publicly', async () => {
   assert.match(response.data.content, /New flower added/);
   assert.match(response.data.content, /Moon Orchid/);
   assert.match(response.data.content, /available to log/);
+});
+
+test('setflowerimage stores an uploaded image for an existing flower', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'admin-1' } },
+      data: {
+        name: 'setflowerimage',
+        options: [
+          { name: 'flower', value: 'flower-id' },
+          { name: 'image', value: 'attachment-id' },
+        ],
+        resolved: {
+          attachments: {
+            'attachment-id': {
+              url: 'https://cdn.discordapp.com/attachments/red-rose.png',
+              content_type: 'image/png',
+            },
+          },
+        },
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('select is_admin')) {
+          return [{ is_admin: true }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Updated the image for Red Rose/);
+  assert.ok(queries.some((query) => query.includes('update flowers') && query.includes('set image_url')));
+});
+
+test('setflowerimage rejects non-image attachments', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'admin-1' } },
+      data: {
+        name: 'setflowerimage',
+        options: [
+          { name: 'flower', value: 'flower-id' },
+          { name: 'image', value: 'attachment-id' },
+        ],
+        resolved: {
+          attachments: {
+            'attachment-id': {
+              url: 'https://cdn.discordapp.com/attachments/notes.txt',
+              content_type: 'text/plain',
+            },
+          },
+        },
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('select is_admin')) {
+          return [{ is_admin: true }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Please upload an image file/);
+  assert.equal(queries.some((query) => query.includes('update flowers')), false);
 });
 
 test('removeuser deletes a player record and reports cascaded flower data', async () => {

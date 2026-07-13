@@ -23,6 +23,7 @@ test('defines the expected private-server slash commands', () => {
       'pinned',
       'done',
       'addflower',
+      'setflowerimage',
       'pinned-flowers',
       'pinned-players',
       'addadmin',
@@ -30,6 +31,33 @@ test('defines the expected private-server slash commands', () => {
       'removeuser',
       'donereset',
       'addplayerflowers',
+    ],
+  );
+});
+
+test('defines flower image attachment options for admin uploads', () => {
+  const addFlowerCommand = discordCommands.find((command) => command.name === 'addflower');
+  const setFlowerImageCommand = discordCommands.find((command) => command.name === 'setflowerimage');
+
+  assert.deepEqual(
+    addFlowerCommand.options.find((option) => option.name === 'image'),
+    {
+      type: 11,
+      name: 'image',
+      description: 'Optional flower image upload',
+      required: false,
+    },
+  );
+  assert.deepEqual(
+    setFlowerImageCommand.options.map((option) => ({
+      name: option.name,
+      type: option.type,
+      required: option.required,
+      autocomplete: option.autocomplete,
+    })),
+    [
+      { name: 'flower', type: 3, required: true, autocomplete: true },
+      { name: 'image', type: 11, required: true, autocomplete: undefined },
     ],
   );
 });
