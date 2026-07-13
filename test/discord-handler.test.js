@@ -492,7 +492,7 @@ test('returns public responses for public flower lookup commands', async () => {
   assert.match(response.data.embeds[0].description, /Red Rose/);
 });
 
-test('find uses status emojis for logged and pinned users', async () => {
+test('find combines pinned and logged users in priority order', async () => {
   const response = await handleInteraction(
     {
       type: InteractionType.APPLICATION_COMMAND,
@@ -512,10 +512,17 @@ test('find uses status emojis for logged and pinned users', async () => {
           return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
         }
         if (query.includes('from flower_logs l')) {
-          return [{ discord_user_id: 'owner-user', game_name: 'Owner Florist', extra_points: 2 }];
+          return [
+            { discord_user_id: 'pinned-extra-user', game_name: 'Pinned Extra Florist', extra_points: 3 },
+            { discord_user_id: 'logged-user', game_name: 'Logged Florist', extra_points: 1 },
+            { discord_user_id: 'pinned-user', game_name: 'Pinned Florist', extra_points: 0 },
+          ];
         }
         if (query.includes('from flower_pins p')) {
-          return [{ discord_user_id: 'pinner-user', game_name: 'Pin Florist' }];
+          return [
+            { discord_user_id: 'pinned-extra-user', game_name: 'Pinned Extra Florist' },
+            { discord_user_id: 'pinned-user', game_name: 'Pinned Florist' },
+          ];
         }
 
         return [];
@@ -525,11 +532,20 @@ test('find uses status emojis for logged and pinned users', async () => {
 
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, undefined);
-  assert.match(response.data.content, /✅ Owner Florist/);
-  assert.match(response.data.content, /extra \+2/);
-  assert.match(response.data.content, /📌 Pin Florist/);
-  assert.doesNotMatch(response.data.content, /- Owner Florist/);
-  assert.doesNotMatch(response.data.content, /- Pin Florist/);
+  assert.match(response.data.content, /Players \(3\):/);
+  assert.doesNotMatch(response.data.content, /Logged by/);
+  assert.doesNotMatch(response.data.content, /Pinned by/);
+
+  const pinnedExtraIndex = response.data.content.indexOf('📌 Pinned Extra Florist');
+  const pinnedIndex = response.data.content.indexOf('📌 Pinned Florist');
+  const loggedIndex = response.data.content.indexOf('✅ Logged Florist');
+
+  assert.ok(pinnedExtraIndex >= 0);
+  assert.ok(pinnedIndex > pinnedExtraIndex);
+  assert.ok(loggedIndex > pinnedIndex);
+  assert.match(response.data.content, /📌 Pinned Extra Florist .*<a:flashingexclamationemoji:1526190062105264259> \+3/);
+  assert.match(response.data.content, /✅ Logged Florist .*<a:flashingexclamationemoji:1526190062105264259> \+1/);
+  assert.equal(response.data.content.match(/Pinned Extra Florist/g).length, 1);
 });
 
 test('info renders logged by you as yes or no', async () => {
