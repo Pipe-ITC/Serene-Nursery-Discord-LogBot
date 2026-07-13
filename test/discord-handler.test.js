@@ -97,7 +97,7 @@ test('blocks flower commands until the user has set a game name', async () => {
   assert.equal(queries.some((query) => query.includes('from flowers')), false);
 });
 
-test('log stores a flower the first time it is logged', async () => {
+test('log announces first bloom when the first guild player logs a flower', async () => {
   const queries = [];
   const response = await handleInteraction(
     {
@@ -121,6 +121,55 @@ test('log stores a flower the first time it is logged', async () => {
         if (query.includes('from flowers')) {
           return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
         }
+        if (query.includes('count(*)') && query.includes('from flower_logs')) {
+          return [{ count: 0 }];
+        }
+        if (query.includes('insert into flower_logs')) {
+          const result = [{ id: 'log-id' }];
+          result.count = 1;
+          return result;
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.equal(response.data.content, 'FIRST BLOOM!');
+  assert.equal(response.data.embeds[0].image.url, 'https://bot.serenenursery.pipeitc.dev/First-Bloom-Stars.gif');
+  assert.match(response.data.embeds[1].description, /<@named-user> is the first player to log Red Rose\./);
+  assert.match(response.data.embeds[1].description, /The nursery catalogue grows by one beautiful discovery\./);
+  assert.match(response.data.embeds[1].description, /A fine moment for the garden, and a finer one for the florist\./);
+  assert.ok(queries.some((query) => query.includes('insert into flower_logs')));
+});
+
+test('log returns the standard private message when the flower has already been logged by the guild', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'log',
+        options: [
+          { name: 'flower', value: 'flower-id' },
+          { name: 'extra_points', value: 1 },
+        ],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+        if (query.includes('count(*)') && query.includes('from flower_logs')) {
+          return [{ count: 1 }];
+        }
         if (query.includes('insert into flower_logs')) {
           const result = [{ id: 'log-id' }];
           result.count = 1;
@@ -137,7 +186,6 @@ test('log stores a flower the first time it is logged', async () => {
   assert.match(response.data.content, /Logged Red Rose/);
   assert.match(response.data.content, /with \+1 extra points/);
   assert.match(response.data.content, /Total for you: 21/);
-  assert.ok(queries.some((query) => query.includes('insert into flower_logs')));
 });
 
 test('log warns when the flower has already been logged', async () => {
