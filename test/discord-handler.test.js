@@ -746,8 +746,10 @@ test('info renders logged by you as yes or no', async () => {
 
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, undefined);
-  assert.match(response.data.content, /Logged by you: Yes/);
-  assert.doesNotMatch(response.data.content, /Logged by you: true/);
+  assert.equal(response.data.content, '');
+  assert.match(response.data.embeds[0].description, /✅ Flower is logged by you/);
+  assert.match(response.data.embeds[0].description, /Logged By: \*\*3 Florists\*\*/);
+  assert.doesNotMatch(response.data.embeds[0].description, /Logged by you: true/);
 });
 
 test('info displays a flower image when one is stored', async () => {
@@ -783,9 +785,12 @@ test('info displays a flower image when one is stored', async () => {
 
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, undefined);
-  assert.match(response.data.content, /Logged by you: No/);
-  assert.equal(response.data.embeds[0].title, 'Red Rose');
-  assert.equal(response.data.embeds[0].image.url, 'https://cdn.discordapp.com/flowers/red-rose.png');
+  assert.equal(response.data.content, '');
+  assert.match(response.data.embeds[0].description, /☑️ Flower is not logged by you/);
+  assert.equal(response.data.embeds[0].title, '<:R:1524529635256307852> Red Rose');
+  assert.equal(response.data.embeds[0].color, 0x4dabf7);
+  assert.equal(response.data.embeds[0].thumbnail.url, 'https://cdn.discordapp.com/flowers/red-rose.png');
+  assert.equal(response.data.embeds[0].image, undefined);
 });
 
 test('findrarity lists flowers for a selected rarity publicly', async () => {
