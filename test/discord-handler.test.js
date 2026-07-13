@@ -137,11 +137,11 @@ test('log announces first bloom when the first guild player logs a flower', asyn
 
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, undefined);
-  assert.equal(response.data.content, '<a:flashing_stars:1526187016717471825> FIRST BLOOM! <a:flashing_stars:1526187016717471825>');
-  assert.equal(response.data.embeds.length, 1);
-  assert.match(response.data.embeds[0].description, /<@named-user> is the first player to log Red Rose\./);
-  assert.match(response.data.embeds[0].description, /The nursery catalogue grows by one beautiful discovery\./);
-  assert.match(response.data.embeds[0].description, /A fine moment for the garden, and a finer one for the florist\./);
+  assert.match(response.data.content, /^<a:flashing_stars:1526187016717471825> FIRST BLOOM! <a:flashing_stars:1526187016717471825>/);
+  assert.match(response.data.content, /<@named-user> is the first player to log Red Rose\./);
+  assert.match(response.data.content, /The nursery catalogue grows by one beautiful discovery\./);
+  assert.match(response.data.content, /A fine moment for the garden, and a finer one for the florist\./);
+  assert.equal(response.data.embeds, undefined);
   assert.ok(queries.some((query) => query.includes('insert into flower_logs')));
 });
 
