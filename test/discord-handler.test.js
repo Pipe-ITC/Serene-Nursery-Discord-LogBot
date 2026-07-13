@@ -49,7 +49,9 @@ test('hides admin commands from non-admin help output', async () => {
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
   assert.match(response.data.content, /\/log <flower>/);
+  assert.match(response.data.content, /\/done/);
   assert.doesNotMatch(response.data.content, /\/addflower/);
+  assert.doesNotMatch(response.data.content, /\/donereset/);
 });
 
 test('shows admin commands to app admins in help output', async () => {
@@ -69,6 +71,7 @@ test('shows admin commands to app admins in help output', async () => {
   assert.match(response.data.content, /\/log <flower>/);
   assert.match(response.data.content, /\/addflower/);
   assert.match(response.data.content, /\/removeuser <user>/);
+  assert.match(response.data.content, /\/donereset/);
 });
 
 test('blocks flower commands until the user has set a game name', async () => {
@@ -662,6 +665,53 @@ test('find combines pinned and logged users in priority order', async () => {
   assert.equal(response.data.content.match(/Pinned Extra Florist/g).length, 1);
 });
 
+test('find shows a grey tick for done users on pinned rows', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'find',
+        options: [{ name: 'flower', value: 'flower-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+        }
+        if (query.includes('from flower_logs l')) {
+          return [
+            { discord_user_id: 'done-pinned-extra-user', game_name: 'Done Extra Florist', extra_points: 4 },
+            { discord_user_id: 'done-pinned-user', game_name: 'Done Florist', extra_points: 0 },
+            { discord_user_id: 'logged-extra-user', game_name: 'Logged Extra Florist', extra_points: 2 },
+          ];
+        }
+        if (query.includes('from flower_pins p')) {
+          return [
+            { discord_user_id: 'done-pinned-extra-user', game_name: 'Done Extra Florist', is_done: true },
+            { discord_user_id: 'done-pinned-user', game_name: 'Done Florist', is_done: true },
+          ];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /☑️ Done Extra Florist .*\+4/);
+  assert.match(response.data.content, /☑️ Done Florist/);
+  assert.match(response.data.content, /<a:flashingexclamationemoji:1526190062105264259> Logged Extra Florist .*\+2/);
+  assert.doesNotMatch(response.data.content, /<a:flashingexclamationemoji:1526190062105264259> Done Extra Florist/);
+  assert.doesNotMatch(response.data.content, /📌 Done Florist/);
+});
+
 test('info renders logged by you as yes or no', async () => {
   const response = await handleInteraction(
     {
@@ -838,6 +888,33 @@ test('pinned user output uses a display name instead of a raw Discord id', async
   assert.equal(response.data.embeds[0].title, 'Target Florist (Target Discord) pinned flowers');
   assert.doesNotMatch(response.data.content, /target-user/);
   assert.doesNotMatch(response.data.embeds[0].title, /target-user/);
+});
+
+test('done marks weekly quests complete privately', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: { name: 'done' },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.equal(response.data.content, '👍 You have marked all your quests as done');
+  assert.ok(queries.some((query) => query.includes('insert into weekly_done_users')));
 });
 
 test('setlevel announces a public fanfare when flowers are logged', async () => {
@@ -1093,6 +1170,63 @@ test('removeuser blocks deleting app admins', async () => {
   assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
   assert.match(response.data.content, /Use \/removeadmin first/);
   assert.ok(!queries.some((query) => query.includes('delete from app_users')));
+});
+
+test('donereset clears weekly done markers for app admins', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'admin-1' } },
+      data: { name: 'donereset' },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('select is_admin')) {
+          return [{ is_admin: true }];
+        }
+        if (query.includes('delete from weekly_done_users')) {
+          return { count: 3 };
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Cleared 3 weekly quest done markers/);
+  assert.ok(queries.some((query) => query.includes('delete from weekly_done_users')));
+});
+
+test('donereset blocks non-admins', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'not-admin' } },
+      data: { name: 'donereset' },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('select is_admin')) {
+          return [{ is_admin: false }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Only app admins/);
+  assert.equal(queries.some((query) => query.includes('delete from weekly_done_users')), false);
 });
 
 test('addplayerflowers accepts a selected flower id from autocomplete', async () => {
