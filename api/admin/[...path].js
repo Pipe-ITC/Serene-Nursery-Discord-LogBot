@@ -292,7 +292,12 @@ ${createSection}
     <label>Player${playerSelect.replace('name="player_id"', 'name="player_id"')}</label>
     <p><button class="secondary" type="submit"${players.length ? '' : ' disabled'}>View Player</button></p>
   </form>
-  ${selectedPlayer ? `<h2>${htmlEscape(selectedPlayer.game_name)}</h2>` : ''}
+  ${selectedPlayer ? `<h2>${htmlEscape(selectedPlayer.game_name)}</h2>
+  <form method="post" action="${path}">
+    <input type="hidden" name="action" value="delete_player">
+    <input type="hidden" name="player_id" value="${htmlEscape(selectedPlayerId)}">
+    <p><button class="danger" type="submit">Delete Player</button></p>
+  </form>` : ''}
   ${loggedFlowers.length ? `<table>
     <thead><tr><th>Flower</th><th>Rarity</th><th>Points</th><th>Pinned</th><th>Actions</th></tr></thead>
     <tbody>
@@ -548,6 +553,32 @@ async function togglePin(sql, form, playerType) {
   return 'Flower pinned.';
 }
 
+async function deletePlayer(sql, form, playerType) {
+  const playerId = form.get('player_id');
+  const player = await assertManagedPlayer(sql, playerId, playerType);
+  if (!player) {
+    return playerType === 'cozy' ? 'Please choose a valid Cozy player.' : 'Please choose a valid Discord user.';
+  }
+
+  const [details] = await sql`
+    select
+      is_admin,
+      (select count(*)::int from flower_logs where discord_user_id = ${playerId}) as logged_flowers,
+      (select count(*)::int from flower_pins where discord_user_id = ${playerId}) as pins
+    from app_users
+    where discord_user_id = ${playerId}
+    limit 1
+  `;
+
+  if (details?.is_admin) {
+    return 'App admins cannot be removed from the dashboard. Use /removeadmin first.';
+  }
+
+  await sql`delete from app_users where discord_user_id = ${playerId}`;
+
+  return `Removed ${player.game_name}. Deleted ${details?.logged_flowers ?? 0} logged flower${details?.logged_flowers === 1 ? '' : 's'} and ${details?.pins ?? 0} pin${details?.pins === 1 ? '' : 's'}.`;
+}
+
 async function handlePlayerPost(req, sql, playerType) {
   const form = await formData(req);
   const action = form.get('action');
@@ -562,6 +593,9 @@ async function handlePlayerPost(req, sql, playerType) {
   }
   if (action === 'toggle_pin') {
     return togglePin(sql, form, playerType);
+  }
+  if (action === 'delete_player') {
+    return deletePlayer(sql, form, playerType);
   }
 
   return 'Unknown action.';

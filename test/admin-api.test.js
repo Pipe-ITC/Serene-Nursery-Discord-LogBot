@@ -113,6 +113,50 @@ test('cozy players page creates players with a cozy uuid id', async () => {
   assert.ok(valuesSeen.some((value) => typeof value === 'string' && /^cozy:[0-9a-f-]{36}$/.test(value)));
 });
 
+test('cozy players page deletes a player and cascaded flower data', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  const queries = [];
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      queries.push(query);
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes("discord_user_id like 'cozy:%'") && values.includes('cozy:player-1')) {
+        return [{ discord_user_id: 'cozy:player-1', game_name: 'Frosty' }];
+      }
+      if (query.includes('select') && query.includes('flower_logs') && query.includes('flower_pins')) {
+        return [{ is_admin: false, logged_flowers: 5, pins: 2 }];
+      }
+      if (query.includes("discord_user_id like 'cozy:%'")) {
+        return [];
+      }
+      if (query.includes('from flowers')) {
+        return [];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(
+    request({
+      method: 'POST',
+      cookie: withAdminSession(),
+      body: new URLSearchParams({ action: 'delete_player', player_id: 'cozy:player-1' }).toString(),
+    }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Removed Frosty/);
+  assert.match(res.body, /5 logged flowers/);
+  assert.match(res.body, /2 pins/);
+  assert.ok(queries.some((query) => query.includes('delete from app_users')));
+});
+
 test('discord users page manages existing Discord users without create controls', async () => {
   process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
   const handler = createAdminHandler({
@@ -198,4 +242,92 @@ test('discord users page logs flowers for an existing Discord user', async () =>
   assert.ok(queries.some((query) => query.includes('insert into flower_logs')));
   assert.ok(valuesSeen.includes('discord-user-1'));
   assert.ok(valuesSeen.includes(3));
+});
+
+test('discord users page deletes a non-admin player and cascaded flower data', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  const queries = [];
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      queries.push(query);
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes("discord_user_id not like 'cozy:%'") && values.includes('discord-user-1')) {
+        return [{ discord_user_id: 'discord-user-1', game_name: 'Rose Keeper' }];
+      }
+      if (query.includes('select') && query.includes('flower_logs') && query.includes('flower_pins')) {
+        return [{ is_admin: false, logged_flowers: 4, pins: 1 }];
+      }
+      if (query.includes("discord_user_id not like 'cozy:%'")) {
+        return [];
+      }
+      if (query.includes('from flowers')) {
+        return [];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(
+    request({
+      method: 'POST',
+      url: '/discord-users',
+      cookie: withAdminSession(),
+      body: new URLSearchParams({ action: 'delete_player', player_id: 'discord-user-1' }).toString(),
+    }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Removed Rose Keeper/);
+  assert.match(res.body, /4 logged flowers/);
+  assert.match(res.body, /1 pin/);
+  assert.ok(queries.some((query) => query.includes('delete from app_users')));
+});
+
+test('discord users page blocks deleting app admins', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  const queries = [];
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      queries.push(query);
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes("discord_user_id not like 'cozy:%'") && values.includes('admin-2')) {
+        return [{ discord_user_id: 'admin-2', game_name: 'Second Admin' }];
+      }
+      if (query.includes('select') && query.includes('flower_logs') && query.includes('flower_pins')) {
+        return [{ is_admin: true, logged_flowers: 1, pins: 1 }];
+      }
+      if (query.includes("discord_user_id not like 'cozy:%'")) {
+        return [];
+      }
+      if (query.includes('from flowers')) {
+        return [];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(
+    request({
+      method: 'POST',
+      url: '/discord-users',
+      cookie: withAdminSession(),
+      body: new URLSearchParams({ action: 'delete_player', player_id: 'admin-2' }).toString(),
+    }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /App admins cannot be removed/);
+  assert.equal(queries.some((query) => query.includes('delete from app_users')), false);
 });
