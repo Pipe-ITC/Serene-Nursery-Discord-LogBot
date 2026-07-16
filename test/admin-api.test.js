@@ -143,9 +143,42 @@ test('cozy players page requires an admin session and renders dashboard controls
   assert.equal(res.statusCode, 200);
   assert.match(res.body, /Create Player/);
   assert.match(res.body, /Frosty/);
+  assert.match(res.body, /<option value="" disabled selected>Select player<\/option>/);
+  assert.match(res.body, /<option value="" disabled selected>Select flower<\/option>/);
   assert.match(res.body, /Red Rose/);
+  assert.doesNotMatch(res.body, /Unpin/);
+  assert.doesNotMatch(res.body, /Delete player Frosty\?/);
+});
+
+test('cozy players page shows selected player details after view', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes("discord_user_id like 'cozy:%'")) {
+        return [{ discord_user_id: 'cozy:player-1', game_name: 'Frosty' }];
+      }
+      if (query.includes('from flowers')) {
+        return [{ id: 'flower-1', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+      }
+      if (query.includes('from flower_logs l')) {
+        return [{ id: 'flower-1', name: 'Red Rose', rarity: 'R', quest_points: 20, extra_points: 2, is_pinned: true }];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(request({ url: '/cozy-players?player_id=cozy%3Aplayer-1', cookie: withAdminSession() }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /<option value="" disabled>Select player<\/option>/);
+  assert.match(res.body, /<option value="cozy:player-1" selected>Frosty<\/option>/);
   assert.match(res.body, /Unpin/);
-  assert.match(res.body, /onsubmit="return confirm/);
   assert.match(res.body, /Delete player Frosty\?/);
 });
 
@@ -261,7 +294,9 @@ test('discord users page manages existing Discord users without create controls'
   assert.match(res.body, /Manage Discord Users/);
   assert.match(res.body, /Rose Keeper/);
   assert.match(res.body, /Red Rose/);
-  assert.match(res.body, /Delete player Rose Keeper\?/);
+  assert.match(res.body, /<option value="" disabled selected>Select player<\/option>/);
+  assert.match(res.body, /<option value="" disabled selected>Select flower<\/option>/);
+  assert.doesNotMatch(res.body, /Delete player Rose Keeper\?/);
   assert.doesNotMatch(res.body, /Create Player/);
 });
 
@@ -312,6 +347,7 @@ test('discord users page logs flowers for an existing Discord user', async () =>
 
   assert.equal(res.statusCode, 200);
   assert.match(res.body, /Logged Red Rose for Rose Keeper/);
+  assert.match(res.body, /<option value="discord-user-1" selected>Rose Keeper<\/option>/);
   assert.ok(queries.some((query) => query.includes('insert into flower_logs')));
   assert.ok(valuesSeen.includes('discord-user-1'));
   assert.ok(valuesSeen.includes(3));

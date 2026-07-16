@@ -351,13 +351,14 @@ function dashboardPage(admin, stats) {
 }
 
 function playerOptions(players, selectedPlayerId) {
-  return players
+  const placeholder = `<option value="" disabled${selectedPlayerId ? '' : ' selected'}>Select player</option>`;
+  return placeholder + players
     .map((player) => `<option value="${htmlEscape(player.discord_user_id)}"${player.discord_user_id === selectedPlayerId ? ' selected' : ''}>${htmlEscape(player.game_name)}</option>`)
     .join('');
 }
 
 function flowerOptions(flowers) {
-  return flowers
+  return '<option value="" disabled selected>Select flower</option>' + flowers
     .map((flower) => `<option value="${htmlEscape(flower.id)}">${htmlEscape(flower.name)} (${htmlEscape(flower.rarity)}, ${flower.quest_points} pts)</option>`)
     .join('');
 }
@@ -485,7 +486,7 @@ async function loadCozyPageData(sql, selectedPlayerId) {
     from flowers
     order by name
   `;
-  const playerId = selectedPlayerId || players[0]?.discord_user_id;
+  const playerId = players.some((player) => player.discord_user_id === selectedPlayerId) ? selectedPlayerId : undefined;
   const loggedFlowers = playerId
     ? await sql`
         select f.id, f.name, f.rarity, f.quest_points, l.extra_points, (p.id is not null) as is_pinned
@@ -512,7 +513,7 @@ async function loadDiscordPageData(sql, selectedPlayerId) {
     from flowers
     order by name
   `;
-  const playerId = selectedPlayerId || players[0]?.discord_user_id;
+  const playerId = players.some((player) => player.discord_user_id === selectedPlayerId) ? selectedPlayerId : undefined;
   const loggedFlowers = playerId
     ? await sql`
         select f.id, f.name, f.rarity, f.quest_points, l.extra_points, (p.id is not null) as is_pinned
@@ -786,23 +787,30 @@ async function deletePlayer(sql, form, playerType) {
 async function handlePlayerPost(req, sql, playerType) {
   const form = await formData(req);
   const action = form.get('action');
+  const selectedPlayerId = form.get('player_id') || undefined;
+  let notice;
   if (playerType === 'cozy' && action === 'create_player') {
-    return createPlayer(sql, form);
+    notice = await createPlayer(sql, form);
+    return { notice };
   }
   if (action === 'log_flower') {
-    return logFlower(sql, form, playerType);
+    notice = await logFlower(sql, form, playerType);
+    return { notice, selectedPlayerId };
   }
   if (action === 'delete_flower') {
-    return deleteFlower(sql, form, playerType);
+    notice = await deleteFlower(sql, form, playerType);
+    return { notice, selectedPlayerId };
   }
   if (action === 'toggle_pin') {
-    return togglePin(sql, form, playerType);
+    notice = await togglePin(sql, form, playerType);
+    return { notice, selectedPlayerId };
   }
   if (action === 'delete_player') {
-    return deletePlayer(sql, form, playerType);
+    notice = await deletePlayer(sql, form, playerType);
+    return { notice };
   }
 
-  return 'Unknown action.';
+  return { notice: 'Unknown action.' };
 }
 
 export function createAdminHandler({ sqlFactory = getSql, fetchImpl = fetch } = {}) {
@@ -883,16 +891,16 @@ export function createAdminHandler({ sqlFactory = getSql, fetchImpl = fetch } = 
 
       if (path === '/cozy-players') {
         let notice = new URL(req.url, adminBaseUrl(req)).searchParams.get('notice');
+        let selectedPlayerId = new URL(req.url, adminBaseUrl(req)).searchParams.get('player_id');
         if (req.method === 'POST') {
-          notice = await handlePlayerPost(req, sql, 'cozy');
+          const result = await handlePlayerPost(req, sql, 'cozy');
+          notice = result.notice;
+          selectedPlayerId = result.selectedPlayerId;
         } else if (req.method !== 'GET') {
           send(res, 405, 'Method not allowed', { Allow: 'GET, POST' });
           return;
         }
 
-        const selectedPlayerId = req.method === 'POST'
-          ? undefined
-          : new URL(req.url, adminBaseUrl(req)).searchParams.get('player_id');
         const data = await loadCozyPageData(sql, selectedPlayerId);
         sendHtml(res, 200, userManagementPage({ admin, title: 'Cozy Players', path: '/cozy-players', notice, allowCreate: true, ...data }));
         return;
@@ -900,16 +908,16 @@ export function createAdminHandler({ sqlFactory = getSql, fetchImpl = fetch } = 
 
       if (path === '/discord-users') {
         let notice = new URL(req.url, adminBaseUrl(req)).searchParams.get('notice');
+        let selectedPlayerId = new URL(req.url, adminBaseUrl(req)).searchParams.get('player_id');
         if (req.method === 'POST') {
-          notice = await handlePlayerPost(req, sql, 'discord');
+          const result = await handlePlayerPost(req, sql, 'discord');
+          notice = result.notice;
+          selectedPlayerId = result.selectedPlayerId;
         } else if (req.method !== 'GET') {
           send(res, 405, 'Method not allowed', { Allow: 'GET, POST' });
           return;
         }
 
-        const selectedPlayerId = req.method === 'POST'
-          ? undefined
-          : new URL(req.url, adminBaseUrl(req)).searchParams.get('player_id');
         const data = await loadDiscordPageData(sql, selectedPlayerId);
         sendHtml(res, 200, userManagementPage({ admin, title: 'Manage Discord Users', path: '/discord-users', notice, allowCreate: false, ...data }));
         return;
