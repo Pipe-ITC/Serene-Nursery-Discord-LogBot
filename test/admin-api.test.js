@@ -75,6 +75,8 @@ test('cozy players page requires an admin session and renders dashboard controls
   assert.match(res.body, /Frosty/);
   assert.match(res.body, /Red Rose/);
   assert.match(res.body, /Unpin/);
+  assert.match(res.body, /onsubmit="return confirm/);
+  assert.match(res.body, /Delete player Frosty\?/);
 });
 
 test('cozy players page creates players with a cozy uuid id', async () => {
@@ -189,6 +191,7 @@ test('discord users page manages existing Discord users without create controls'
   assert.match(res.body, /Manage Discord Users/);
   assert.match(res.body, /Rose Keeper/);
   assert.match(res.body, /Red Rose/);
+  assert.match(res.body, /Delete player Rose Keeper\?/);
   assert.doesNotMatch(res.body, /Create Player/);
 });
 

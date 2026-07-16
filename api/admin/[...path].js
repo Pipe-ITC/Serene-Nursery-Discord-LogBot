@@ -31,6 +31,15 @@ function htmlEscape(value = '') {
     .replaceAll("'", '&#39;');
 }
 
+function jsStringLiteral(value = '') {
+  return JSON.stringify(String(value))
+    .replaceAll('<', '\\u003c')
+    .replaceAll('>', '\\u003e')
+    .replaceAll('&', '\\u0026')
+    .replaceAll('\u2028', '\\u2028')
+    .replaceAll('\u2029', '\\u2029');
+}
+
 function parseCookies(req) {
   const header = req.headers?.cookie ?? '';
   return Object.fromEntries(
@@ -250,6 +259,9 @@ function flowerOptions(flowers) {
 
 function userManagementPage({ admin, title, path, players, flowers, selectedPlayerId, loggedFlowers, notice, allowCreate = false }) {
   const selectedPlayer = players.find((player) => player.discord_user_id === selectedPlayerId);
+  const deleteConfirmation = selectedPlayer
+    ? `Delete player ${selectedPlayer.game_name}?\n\nThis will remove their player record, logged flowers, and pins.`
+    : '';
   const playerSelect = players.length
     ? `<select name="player_id" required>${playerOptions(players, selectedPlayerId)}</select>`
     : `<p class="muted">${allowCreate ? 'Create a Cozy player first.' : 'No eligible Discord users found.'}</p>`;
@@ -293,7 +305,7 @@ ${createSection}
     <p><button class="secondary" type="submit"${players.length ? '' : ' disabled'}>View Player</button></p>
   </form>
   ${selectedPlayer ? `<h2>${htmlEscape(selectedPlayer.game_name)}</h2>
-  <form method="post" action="${path}">
+  <form method="post" action="${path}" onsubmit="return confirm(${htmlEscape(jsStringLiteral(deleteConfirmation))})">
     <input type="hidden" name="action" value="delete_player">
     <input type="hidden" name="player_id" value="${htmlEscape(selectedPlayerId)}">
     <p><button class="danger" type="submit">Delete Player</button></p>
