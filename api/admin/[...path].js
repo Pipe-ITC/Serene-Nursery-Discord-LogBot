@@ -198,6 +198,7 @@ function layout({ title, admin, body, notice }) {
       <a href="/">Serene Nursery Admin</a>
       <span class="links">
         <a href="/cozy-players">Cozy Players</a>
+        <a href="/discord-users">Discord Users</a>
         ${admin ? `<span class="muted">${htmlEscape(admin.game_name || admin.discord_user_id)}</span><a href="/logout">Logout</a>` : ''}
       </span>
     </nav>
@@ -230,6 +231,7 @@ function dashboardPage(admin) {
   <h2>Admin Tools</h2>
   <p class="muted">Choose an admin area.</p>
   <a class="button" href="/cozy-players">Manage Cozy Players</a>
+  <a class="button secondary" href="/discord-users">Manage Discord Users</a>
 </section>`,
   });
 }
@@ -246,31 +248,34 @@ function flowerOptions(flowers) {
     .join('');
 }
 
-function cozyPlayersPage({ admin, players, flowers, selectedPlayerId, loggedFlowers, notice }) {
+function userManagementPage({ admin, title, path, players, flowers, selectedPlayerId, loggedFlowers, notice, allowCreate = false }) {
   const selectedPlayer = players.find((player) => player.discord_user_id === selectedPlayerId);
   const playerSelect = players.length
     ? `<select name="player_id" required>${playerOptions(players, selectedPlayerId)}</select>`
-    : '<p class="muted">Create a Cozy player first.</p>';
-
-  return layout({
-    title: 'Cozy Players',
-    admin,
-    notice,
-    body: `<h1>Cozy Players</h1>
-<section class="panel">
+    : `<p class="muted">${allowCreate ? 'Create a Cozy player first.' : 'No eligible Discord users found.'}</p>`;
+  const createSection = allowCreate
+    ? `<section class="panel">
   <h2>Create Player</h2>
-  <form method="post" action="/cozy-players">
+  <form method="post" action="${path}">
     <input type="hidden" name="action" value="create_player">
     <div class="grid">
       <label>Game name<input name="game_name" maxlength="80" required></label>
     </div>
     <p><button type="submit">Create Player</button></p>
   </form>
-</section>
+</section>`
+    : '';
+
+  return layout({
+    title,
+    admin,
+    notice,
+    body: `<h1>${htmlEscape(title)}</h1>
+${createSection}
 
 <section class="panel">
   <h2>Log Flower</h2>
-  <form method="post" action="/cozy-players">
+  <form method="post" action="${path}">
     <input type="hidden" name="action" value="log_flower">
     <div class="grid">
       <label>Player${playerSelect}</label>
@@ -283,7 +288,7 @@ function cozyPlayersPage({ admin, players, flowers, selectedPlayerId, loggedFlow
 
 <section class="panel">
   <h2>Player Collection</h2>
-  <form method="get" action="/cozy-players" class="grid">
+  <form method="get" action="${path}" class="grid">
     <label>Player${playerSelect.replace('name="player_id"', 'name="player_id"')}</label>
     <p><button class="secondary" type="submit"${players.length ? '' : ' disabled'}>View Player</button></p>
   </form>
@@ -297,13 +302,13 @@ function cozyPlayersPage({ admin, players, flowers, selectedPlayerId, loggedFlow
         <td>${Number(row.quest_points) + Number(row.extra_points ?? 0)}${Number(row.extra_points ?? 0) > 0 ? ` (+${row.extra_points})` : ''}</td>
         <td>${row.is_pinned ? 'Yes' : 'No'}</td>
         <td class="actions">
-          <form method="post" action="/cozy-players">
+          <form method="post" action="${path}">
             <input type="hidden" name="action" value="toggle_pin">
             <input type="hidden" name="player_id" value="${htmlEscape(selectedPlayerId)}">
             <input type="hidden" name="flower_id" value="${htmlEscape(row.id)}">
             <button class="secondary" type="submit">${row.is_pinned ? 'Unpin' : 'Pin'}</button>
           </form>
-          <form method="post" action="/cozy-players">
+          <form method="post" action="${path}">
             <input type="hidden" name="action" value="delete_flower">
             <input type="hidden" name="player_id" value="${htmlEscape(selectedPlayerId)}">
             <input type="hidden" name="flower_id" value="${htmlEscape(row.id)}">
@@ -373,6 +378,33 @@ async function loadCozyPageData(sql, selectedPlayerId) {
   return { players, flowers, selectedPlayerId: playerId, loggedFlowers };
 }
 
+async function loadDiscordPageData(sql, selectedPlayerId) {
+  const players = await sql`
+    select discord_user_id, coalesce(nullif(game_name, ''), discord_user_id) as game_name
+    from app_users
+    where discord_user_id not like 'cozy:%'
+    order by lower(coalesce(nullif(game_name, ''), discord_user_id)), discord_user_id
+  `;
+  const flowers = await sql`
+    select id, name, rarity, quest_points
+    from flowers
+    order by name
+  `;
+  const playerId = selectedPlayerId || players[0]?.discord_user_id;
+  const loggedFlowers = playerId
+    ? await sql`
+        select f.id, f.name, f.rarity, f.quest_points, l.extra_points, (p.id is not null) as is_pinned
+        from flower_logs l
+        join flowers f on f.id = l.flower_id
+        left join flower_pins p on p.discord_user_id = l.discord_user_id and p.flower_id = l.flower_id
+        where l.discord_user_id = ${playerId}
+        order by f.name
+      `
+    : [];
+
+  return { players, flowers, selectedPlayerId: playerId, loggedFlowers };
+}
+
 async function createPlayer(sql, form) {
   const gameName = form.get('game_name')?.trim();
   if (!gameName) {
@@ -402,22 +434,34 @@ function validExtraPoints(value) {
   return Number.isInteger(points) && (points === 0 || [1, 2, 3, 4].includes(points)) ? points : undefined;
 }
 
-async function assertCozyPlayer(sql, playerId) {
-  if (!playerId?.startsWith('cozy:')) {
+async function assertManagedPlayer(sql, playerId, playerType) {
+  if (playerType === 'cozy' && !playerId?.startsWith('cozy:')) {
     return undefined;
   }
 
-  const [player] = await sql`
-    select discord_user_id, game_name
-    from app_users
-    where discord_user_id = ${playerId}
-      and discord_user_id like 'cozy:%'
-    limit 1
-  `;
+  if (playerType === 'discord' && (!playerId || playerId.startsWith('cozy:'))) {
+    return undefined;
+  }
+
+  const [player] = playerType === 'cozy'
+    ? await sql`
+        select discord_user_id, game_name
+        from app_users
+        where discord_user_id = ${playerId}
+          and discord_user_id like 'cozy:%'
+        limit 1
+      `
+    : await sql`
+        select discord_user_id, coalesce(nullif(game_name, ''), discord_user_id) as game_name
+        from app_users
+        where discord_user_id = ${playerId}
+          and discord_user_id not like 'cozy:%'
+        limit 1
+      `;
   return player;
 }
 
-async function logFlower(sql, form) {
+async function logFlower(sql, form, playerType) {
   const playerId = form.get('player_id');
   const flowerId = form.get('flower_id');
   const extraPoints = validExtraPoints(form.get('extra_points'));
@@ -425,9 +469,9 @@ async function logFlower(sql, form) {
     return 'Extra points must be 0, 1, 2, 3, or 4.';
   }
 
-  const player = await assertCozyPlayer(sql, playerId);
+  const player = await assertManagedPlayer(sql, playerId, playerType);
   if (!player) {
-    return 'Please choose a valid Cozy player.';
+    return playerType === 'cozy' ? 'Please choose a valid Cozy player.' : 'Please choose a valid Discord user.';
   }
 
   const [flower] = await sql`select id, name from flowers where id = ${flowerId} limit 1`;
@@ -453,12 +497,12 @@ async function logFlower(sql, form) {
   return `Logged ${flower.name} for ${player.game_name}.`;
 }
 
-async function deleteFlower(sql, form) {
+async function deleteFlower(sql, form, playerType) {
   const playerId = form.get('player_id');
   const flowerId = form.get('flower_id');
-  const player = await assertCozyPlayer(sql, playerId);
+  const player = await assertManagedPlayer(sql, playerId, playerType);
   if (!player) {
-    return 'Please choose a valid Cozy player.';
+    return playerType === 'cozy' ? 'Please choose a valid Cozy player.' : 'Please choose a valid Discord user.';
   }
 
   await sql`
@@ -469,12 +513,12 @@ async function deleteFlower(sql, form) {
   return 'Flower log removed.';
 }
 
-async function togglePin(sql, form) {
+async function togglePin(sql, form, playerType) {
   const playerId = form.get('player_id');
   const flowerId = form.get('flower_id');
-  const player = await assertCozyPlayer(sql, playerId);
+  const player = await assertManagedPlayer(sql, playerId, playerType);
   if (!player) {
-    return 'Please choose a valid Cozy player.';
+    return playerType === 'cozy' ? 'Please choose a valid Cozy player.' : 'Please choose a valid Discord user.';
   }
 
   const [logged] = await sql`
@@ -504,20 +548,20 @@ async function togglePin(sql, form) {
   return 'Flower pinned.';
 }
 
-async function handleCozyPost(req, sql) {
+async function handlePlayerPost(req, sql, playerType) {
   const form = await formData(req);
   const action = form.get('action');
-  if (action === 'create_player') {
+  if (playerType === 'cozy' && action === 'create_player') {
     return createPlayer(sql, form);
   }
   if (action === 'log_flower') {
-    return logFlower(sql, form);
+    return logFlower(sql, form, playerType);
   }
   if (action === 'delete_flower') {
-    return deleteFlower(sql, form);
+    return deleteFlower(sql, form, playerType);
   }
   if (action === 'toggle_pin') {
-    return togglePin(sql, form);
+    return togglePin(sql, form, playerType);
   }
 
   return 'Unknown action.';
@@ -602,7 +646,7 @@ export function createAdminHandler({ sqlFactory = getSql, fetchImpl = fetch } = 
       if (path === '/cozy-players') {
         let notice = new URL(req.url, adminBaseUrl(req)).searchParams.get('notice');
         if (req.method === 'POST') {
-          notice = await handleCozyPost(req, sql);
+          notice = await handlePlayerPost(req, sql, 'cozy');
         } else if (req.method !== 'GET') {
           send(res, 405, 'Method not allowed', { Allow: 'GET, POST' });
           return;
@@ -612,7 +656,24 @@ export function createAdminHandler({ sqlFactory = getSql, fetchImpl = fetch } = 
           ? undefined
           : new URL(req.url, adminBaseUrl(req)).searchParams.get('player_id');
         const data = await loadCozyPageData(sql, selectedPlayerId);
-        sendHtml(res, 200, cozyPlayersPage({ admin, notice, ...data }));
+        sendHtml(res, 200, userManagementPage({ admin, title: 'Cozy Players', path: '/cozy-players', notice, allowCreate: true, ...data }));
+        return;
+      }
+
+      if (path === '/discord-users') {
+        let notice = new URL(req.url, adminBaseUrl(req)).searchParams.get('notice');
+        if (req.method === 'POST') {
+          notice = await handlePlayerPost(req, sql, 'discord');
+        } else if (req.method !== 'GET') {
+          send(res, 405, 'Method not allowed', { Allow: 'GET, POST' });
+          return;
+        }
+
+        const selectedPlayerId = req.method === 'POST'
+          ? undefined
+          : new URL(req.url, adminBaseUrl(req)).searchParams.get('player_id');
+        const data = await loadDiscordPageData(sql, selectedPlayerId);
+        sendHtml(res, 200, userManagementPage({ admin, title: 'Manage Discord Users', path: '/discord-users', notice, allowCreate: false, ...data }));
         return;
       }
 

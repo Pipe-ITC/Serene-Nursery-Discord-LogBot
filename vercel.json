@@ -30,6 +30,10 @@
     {
       "source": "/cozy-players",
       "destination": "/api/admin/cozy-players"
+    },
+    {
+      "source": "/discord-users",
+      "destination": "/api/admin/discord-users"
     }
   ],
   "crons": [

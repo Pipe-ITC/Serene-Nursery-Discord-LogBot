@@ -71,7 +71,7 @@ The admin dashboard is served from:
 https://admin.serenenursery.pipeitc.dev
 ```
 
-It uses Discord OAuth2 login and only allows users whose Discord ID is marked as an app admin in `app_users`. The dashboard includes a Cozy Players page for creating non-Discord players with `cozy:<uuid>` IDs, then logging, deleting, and pinning flowers on their behalf.
+It uses Discord OAuth2 login and only allows users whose Discord ID is marked as an app admin in `app_users`. The dashboard includes a Cozy Players page for creating non-Discord players with `cozy:<uuid>` IDs, then logging, deleting, and pinning flowers on their behalf. It also includes a Manage Discord Users page for logging, deleting, and pinning flowers for existing Discord-linked users.
 
 Required environment variables:
 
