@@ -34,6 +34,15 @@ test('donereset cron rejects requests without the cron secret', async () => {
   assert.deepEqual(res.json(), { error: 'Unauthorized' });
 });
 
+test('donereset cron is not exposed on the admin host', async () => {
+  const res = mockResponse();
+
+  await doneResetCron({ method: 'GET', headers: { host: 'admin.serenenursery.pipeitc.dev' } }, res);
+
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.json(), { error: 'Not found' });
+});
+
 test('donereset cron only allows get requests', async () => {
   const res = mockResponse();
 

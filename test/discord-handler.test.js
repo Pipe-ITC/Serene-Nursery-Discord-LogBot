@@ -52,6 +52,7 @@ test('hides admin commands from non-admin help output', async () => {
   assert.match(response.data.content, /\/done/);
   assert.doesNotMatch(response.data.content, /\/addflower/);
   assert.doesNotMatch(response.data.content, /\/donereset/);
+  assert.doesNotMatch(response.data.content, /admin\.serenenursery\.pipeitc\.dev/);
 });
 
 test('shows admin commands to app admins in help output', async () => {
@@ -73,6 +74,7 @@ test('shows admin commands to app admins in help output', async () => {
   assert.match(response.data.content, /\/setflowerimage <flower> <image>/);
   assert.match(response.data.content, /\/removeuser <user>/);
   assert.match(response.data.content, /\/donereset/);
+  assert.match(response.data.content, /https:\/\/admin\.serenenursery\.pipeitc\.dev/);
 });
 
 test('blocks flower commands until the user has set a game name', async () => {

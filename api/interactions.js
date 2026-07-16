@@ -1,5 +1,6 @@
 import { handleInteraction } from '../lib/discord/handler.js';
 import { verifyDiscordSignature } from '../lib/discord/verify.js';
+import { shouldBlockBotSurface } from '../lib/http/hosts.js';
 import { readRawBody } from '../lib/http/raw-body.js';
 
 export const config = {
@@ -16,6 +17,11 @@ function sendJson(res, status, payload) {
 
 export default async function interactions(req, res) {
   try {
+    if (shouldBlockBotSurface(req)) {
+      sendJson(res, 404, { error: 'Not found' });
+      return;
+    }
+
     if (req.method === 'GET') {
       sendJson(res, 200, { ok: true, service: 'discord-interactions' });
       return;

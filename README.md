@@ -63,6 +63,40 @@ CRON_SECRET
 
 The cron endpoint only accepts `GET` requests with `Authorization: Bearer $CRON_SECRET`. It clears the weekly `/done` markers by running the same reset helper as the admin-only `/donereset` command.
 
+## Admin Dashboard
+
+The admin dashboard is served from:
+
+```text
+https://admin.serenenursery.pipeitc.dev
+```
+
+It uses Discord OAuth2 login and only allows users whose Discord ID is marked as an app admin in `app_users`. The dashboard includes a Cozy Players page for creating non-Discord players with `cozy:<uuid>` IDs, then logging, deleting, and pinning flowers on their behalf.
+
+Required environment variables:
+
+```text
+DISCORD_CLIENT_SECRET
+ADMIN_BASE_URL
+ADMIN_HOST
+ADMIN_SESSION_SECRET
+BOT_HOST
+```
+
+The bot endpoints reject the admin host, and the admin dashboard rejects non-admin hosts.
+
+Discord Developer Portal OAuth2 redirect:
+
+```text
+https://admin.serenenursery.pipeitc.dev/auth/callback
+```
+
+DNS for the admin hostname should point to Vercel:
+
+```text
+A admin.serenenursery.pipeitc.dev 76.76.21.21
+```
+
 ## Discord Command Registration
 
 Milestone 4 adds guild slash command registration for the private Discord server.

@@ -1,4 +1,5 @@
 import { getSql } from '../../lib/db/client.js';
+import { shouldBlockBotSurface } from '../../lib/http/hosts.js';
 import { resetWeeklyDoneUsers } from '../../lib/weekly-done.js';
 
 function sendJson(res, status, payload) {
@@ -10,6 +11,11 @@ function sendJson(res, status, payload) {
 export function createDoneResetCron({ sqlFactory = getSql } = {}) {
   return async function doneResetCron(req, res) {
     try {
+      if (shouldBlockBotSurface(req)) {
+        sendJson(res, 404, { error: 'Not found' });
+        return;
+      }
+
       if (req.method !== 'GET') {
         res.setHeader('Allow', 'GET');
         sendJson(res, 405, { error: 'Method not allowed' });

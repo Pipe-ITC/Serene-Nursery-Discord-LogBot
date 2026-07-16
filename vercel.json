@@ -5,8 +5,33 @@
     },
     "api/cron/donereset.js": {
       "maxDuration": 10
+    },
+    "api/admin/[...path].js": {
+      "maxDuration": 10
     }
   },
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/admin/dashboard"
+    },
+    {
+      "source": "/login",
+      "destination": "/api/admin/login"
+    },
+    {
+      "source": "/auth/callback",
+      "destination": "/api/admin/auth/callback"
+    },
+    {
+      "source": "/logout",
+      "destination": "/api/admin/logout"
+    },
+    {
+      "source": "/cozy-players",
+      "destination": "/api/admin/cozy-players"
+    }
+  ],
   "crons": [
     {
       "path": "/api/cron/donereset",

@@ -12,3 +12,15 @@ test('schedules weekly done reset for Monday 10:00 UTC', async () => {
     },
   ]);
 });
+
+test('rewrites admin dashboard paths to the admin function', async () => {
+  const config = JSON.parse(await readFile('vercel.json', 'utf8'));
+
+  assert.deepEqual(config.rewrites, [
+    { source: '/', destination: '/api/admin/dashboard' },
+    { source: '/login', destination: '/api/admin/login' },
+    { source: '/auth/callback', destination: '/api/admin/auth/callback' },
+    { source: '/logout', destination: '/api/admin/logout' },
+    { source: '/cozy-players', destination: '/api/admin/cozy-players' },
+  ]);
+});
