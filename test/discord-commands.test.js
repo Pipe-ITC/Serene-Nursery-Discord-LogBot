@@ -21,6 +21,7 @@ test('defines the expected private-server slash commands', () => {
       'count',
       'pin',
       'pinned',
+      'cozyplayers',
       'done',
       'addflower',
       'setflowerimage',

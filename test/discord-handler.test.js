@@ -936,6 +936,44 @@ test('pinned user output uses a display name instead of a raw Discord id', async
   assert.doesNotMatch(response.data.embeds[0].title, /target-user/);
 });
 
+test('cozyplayers lists only Cozy players with pinned flowers grouped underneath', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: { name: 'cozyplayers' },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users') && query.includes('where discord_user_id =')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from app_users u')) {
+          return [
+            { discord_user_id: 'cozy:first', game_name: 'Frosty', name: 'Gold Lily', rarity: 'SSR', quest_points: 80 },
+            { discord_user_id: 'cozy:first', game_name: 'Frosty', name: 'Red Rose', rarity: 'R', quest_points: 20 },
+            { discord_user_id: 'cozy:second', game_name: 'Snowdrop', name: null, rarity: null, quest_points: null },
+          ];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  const description = response.data.embeds[0].description;
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.content, /Cozy players \(2\):/);
+  assert.match(description, /\*\*Frosty \(Cozy Player\)\*\*/);
+  assert.match(description, /📌 Gold Lily/);
+  assert.match(description, /📌 Red Rose/);
+  assert.match(description, /\*\*Snowdrop \(Cozy Player\)\*\*/);
+  assert.match(description, /No pinned flowers\./);
+});
+
 test('done marks weekly quests complete privately', async () => {
   const queries = [];
   const response = await handleInteraction(
