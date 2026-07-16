@@ -188,6 +188,12 @@ function layout({ title, admin, body, notice }) {
     h2 { margin-top: 28px; font-size: 20px; }
     .panel { border: 1px solid #303442; background: #202331; border-radius: 8px; padding: 18px; margin-bottom: 18px; }
     .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .stats { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 18px; }
+    .stat { border: 1px solid #303442; background: #181b27; border-radius: 8px; padding: 14px; }
+    .stat strong { display: block; margin-top: 6px; font-size: 26px; color: #f9fafb; }
+    .split { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .list { margin: 0; padding-left: 20px; }
+    .list li { margin: 8px 0; }
     label { display: grid; gap: 6px; color: #cbd5e1; font-size: 14px; }
     input, select { box-sizing: border-box; width: 100%; border: 1px solid #4b5563; background: #111827; color: #f9fafb; border-radius: 6px; padding: 10px 11px; font: inherit; }
     button, .button { border: 0; background: #ff66c4; color: #111827; padding: 10px 14px; border-radius: 6px; font: inherit; font-weight: 750; cursor: pointer; text-decoration: none; display: inline-block; }
@@ -231,11 +237,110 @@ function loginPage() {
   });
 }
 
-function dashboardPage(admin) {
+function statCard(label, value) {
+  return `<div class="stat"><span class="muted">${htmlEscape(label)}</span><strong>${htmlEscape(value)}</strong></div>`;
+}
+
+function dashboardFlowerLine(row) {
+  return `${htmlEscape(row.name)} <span class="muted">(${htmlEscape(row.rarity)})</span> <strong>${row.count}</strong>`;
+}
+
+function dashboardUserName(user) {
+  const name = user.game_name || user.discord_user_id;
+  return user.discord_user_id?.startsWith('cozy:') ? `${name} (Cozy Player)` : name;
+}
+
+function dashboardList(items, formatter, emptyText) {
+  if (items.length === 0) {
+    return `<p class="muted">${htmlEscape(emptyText)}</p>`;
+  }
+
+  return `<ol class="list">${items.map((item) => `<li>${formatter(item)}</li>`).join('')}</ol>`;
+}
+
+function formatDashboardDate(value) {
+  if (!value) {
+    return 'Unknown time';
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' });
+}
+
+function dashboardPage(admin, stats) {
+  const donePercent = stats.summary.active_players > 0
+    ? Math.round((stats.summary.done_count / stats.summary.active_players) * 100)
+    : 0;
+
   return layout({
     title: 'Dashboard',
     admin,
     body: `<h1>Dashboard</h1>
+<section class="panel">
+  <h2>Player Summary</h2>
+  <div class="stats">
+    ${statCard('Discord players', stats.summary.discord_players)}
+    ${statCard('Cozy players', stats.summary.cozy_players)}
+    ${statCard('Active logged players', stats.summary.active_players)}
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Flower Summary</h2>
+  <div class="stats">
+    ${statCard('Flowers in database', stats.summary.total_flowers)}
+    ${statCard('Unowned flowers', stats.summary.unowned_flowers)}
+    ${statCard('Logged flower entries', stats.summary.total_logs)}
+    ${statCard('Pinned flowers', stats.summary.total_pins)}
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Weekly Status</h2>
+  <div class="stats">
+    ${statCard('Players marked done', stats.summary.done_count)}
+    ${statCard('Active players done', `${donePercent}%`)}
+  </div>
+</section>
+
+<section class="split">
+  <div class="panel">
+    <h2>Most Pinned Flowers</h2>
+    ${dashboardList(stats.mostPinned, dashboardFlowerLine, 'No pinned flowers yet.')}
+  </div>
+  <div class="panel">
+    <h2>Most Owned Flowers</h2>
+    ${dashboardList(stats.mostOwned, dashboardFlowerLine, 'No logged flowers yet.')}
+  </div>
+  <div class="panel">
+    <h2>Least Owned Flowers</h2>
+    ${dashboardList(stats.leastOwned, dashboardFlowerLine, 'No flowers found.')}
+  </div>
+  <div class="panel">
+    <h2>Top Collectors</h2>
+    ${dashboardList(
+      stats.topCollectors,
+      (row) => `${htmlEscape(dashboardUserName(row))} <strong>${row.count}</strong>`,
+      'No collectors yet.',
+    )}
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Recent Activity</h2>
+  ${stats.recentLogs.length ? `<table>
+    <thead><tr><th>Player</th><th>Flower</th><th>Points</th><th>Logged</th></tr></thead>
+    <tbody>
+      ${stats.recentLogs.map((row) => `<tr>
+        <td>${htmlEscape(dashboardUserName(row))}</td>
+        <td>${htmlEscape(row.name)} <span class="muted">(${htmlEscape(row.rarity)})</span></td>
+        <td>${Number(row.quest_points) + Number(row.extra_points ?? 0)}${Number(row.extra_points ?? 0) > 0 ? ` (+${row.extra_points})` : ''}</td>
+        <td>${htmlEscape(formatDashboardDate(row.logged_at))}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>` : '<p class="muted">No recent logs yet.</p>'}
+</section>
+
 <section class="panel">
   <h2>Admin Tools</h2>
   <p class="muted">Choose an admin area.</p>
@@ -420,6 +525,93 @@ async function loadDiscordPageData(sql, selectedPlayerId) {
     : [];
 
   return { players, flowers, selectedPlayerId: playerId, loggedFlowers };
+}
+
+async function loadDashboardStats(sql) {
+  const [summary = {}] = await sql`
+    select
+      (select count(*)::int from app_users where discord_user_id not like 'cozy:%') as discord_players,
+      (select count(*)::int from app_users where discord_user_id like 'cozy:%') as cozy_players,
+      (select count(distinct discord_user_id)::int from flower_logs) as active_players,
+      (select count(*)::int from flowers) as total_flowers,
+      (
+        select count(*)::int
+        from flowers f
+        where not exists (
+          select 1
+          from flower_logs l
+          where l.flower_id = f.id
+        )
+      ) as unowned_flowers,
+      (select count(*)::int from flower_logs) as total_logs,
+      (select count(*)::int from flower_pins) as total_pins,
+      (select count(*)::int from weekly_done_users) as done_count
+  `;
+  const mostPinned = await sql`
+    select f.name, f.rarity, count(*)::int as count
+    from flower_pins p
+    join flowers f on f.id = p.flower_id
+    group by f.id, f.name, f.rarity
+    order by count desc, f.name
+    limit 5
+  `;
+  const mostOwned = await sql`
+    select f.name, f.rarity, count(*)::int as count
+    from flower_logs l
+    join flowers f on f.id = l.flower_id
+    group by f.id, f.name, f.rarity
+    order by count desc, f.name
+    limit 5
+  `;
+  const leastOwned = await sql`
+    select f.name, f.rarity, count(l.flower_id)::int as count
+    from flowers f
+    left join flower_logs l on l.flower_id = f.id
+    group by f.id, f.name, f.rarity
+    order by count asc, f.name
+    limit 5
+  `;
+  const topCollectors = await sql`
+    select u.discord_user_id, coalesce(nullif(u.game_name, ''), u.discord_user_id) as game_name, count(*)::int as count
+    from flower_logs l
+    join app_users u on u.discord_user_id = l.discord_user_id
+    group by u.discord_user_id, u.game_name
+    order by count desc, lower(coalesce(nullif(u.game_name, ''), u.discord_user_id))
+    limit 5
+  `;
+  const recentLogs = await sql`
+    select
+      u.discord_user_id,
+      coalesce(nullif(u.game_name, ''), u.discord_user_id) as game_name,
+      f.name,
+      f.rarity,
+      f.quest_points,
+      l.extra_points,
+      l.logged_at
+    from flower_logs l
+    join app_users u on u.discord_user_id = l.discord_user_id
+    join flowers f on f.id = l.flower_id
+    order by l.logged_at desc
+    limit 10
+  `;
+
+  return {
+    summary: {
+      discord_players: summary.discord_players ?? 0,
+      cozy_players: summary.cozy_players ?? 0,
+      active_players: summary.active_players ?? 0,
+      total_flowers: summary.total_flowers ?? 0,
+      unowned_flowers: summary.unowned_flowers ?? 0,
+      total_logs: summary.total_logs ?? 0,
+      total_pins: summary.total_pins ?? 0,
+      done_count: summary.done_count ?? 0,
+    },
+    mostPinned,
+    mostOwned,
+    leastOwned,
+    topCollectors,
+    recentLogs,
+  };
 }
 
 async function createPlayer(sql, form) {
@@ -685,7 +877,7 @@ export function createAdminHandler({ sqlFactory = getSql, fetchImpl = fetch } = 
       }
 
       if ((path === '/' || path === '/dashboard') && req.method === 'GET') {
-        sendHtml(res, 200, dashboardPage(admin));
+        sendHtml(res, 200, dashboardPage(admin, await loadDashboardStats(sql)));
         return;
       }
 

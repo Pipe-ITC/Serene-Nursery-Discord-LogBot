@@ -45,6 +45,76 @@ test('admin surface rejects the bot host', async () => {
   assert.equal(res.statusCode, 404);
 });
 
+test('dashboard renders admin summary stats and activity lists', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes('as discord_players')) {
+        return [{
+          discord_players: 7,
+          cozy_players: 3,
+          active_players: 8,
+          total_flowers: 120,
+          unowned_flowers: 4,
+          total_logs: 240,
+          total_pins: 18,
+          done_count: 5,
+        }];
+      }
+      if (query.includes('from flower_pins p')) {
+        return [{ name: 'Red Rose', rarity: 'R', count: 6 }];
+      }
+      if (query.includes('left join flower_logs l')) {
+        return [{ name: 'Quiet Daisy', rarity: 'N', count: 0 }];
+      }
+      if (query.includes('join app_users u') && query.includes('group by u.discord_user_id')) {
+        return [{ discord_user_id: 'cozy:player-1', game_name: 'Frosty', count: 40 }];
+      }
+      if (query.includes('from flower_logs l') && query.includes('join flowers f') && query.includes('order by count desc')) {
+        return [{ name: 'Gold Lily', rarity: 'SSR', count: 12 }];
+      }
+      if (query.includes('order by l.logged_at desc')) {
+        return [{
+          discord_user_id: 'discord-user-1',
+          game_name: 'Rose Keeper',
+          name: 'Blue Rose',
+          rarity: 'R',
+          quest_points: 20,
+          extra_points: 2,
+          logged_at: '2026-07-16T10:00:00.000Z',
+        }];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(request({ url: '/dashboard', cookie: withAdminSession() }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Player Summary/);
+  assert.match(res.body, /Discord players/);
+  assert.match(res.body, />7</);
+  assert.match(res.body, /Cozy players/);
+  assert.match(res.body, />3</);
+  assert.match(res.body, /Unowned flowers/);
+  assert.match(res.body, />4</);
+  assert.match(res.body, /Players marked done/);
+  assert.match(res.body, />5</);
+  assert.match(res.body, /Most Pinned Flowers/);
+  assert.match(res.body, /Red Rose/);
+  assert.match(res.body, /Top Collectors/);
+  assert.match(res.body, /Frosty \(Cozy Player\)/);
+  assert.match(res.body, /Recent Activity/);
+  assert.match(res.body, /Blue Rose/);
+  assert.match(res.body, /22 \(\+2\)/);
+});
+
 test('cozy players page requires an admin session and renders dashboard controls', async () => {
   process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
   const handler = createAdminHandler({
