@@ -880,8 +880,8 @@ test('pinned uses embeds for public flower lists', async () => {
         }
 
         return [
-          { name: 'Blue Rose', rarity: 'R', quest_points: 20 },
-          { name: 'Gold Lily', rarity: 'SSR', quest_points: 80 },
+          { name: 'Blue Rose', rarity: 'R', quest_points: 20, extra_points: 2 },
+          { name: 'Gold Lily', rarity: 'SSR', quest_points: 80, extra_points: 0 },
         ];
       },
     },
@@ -890,8 +890,8 @@ test('pinned uses embeds for public flower lists', async () => {
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, undefined);
   assert.match(response.data.content, /Your pinned flowers \(2\):/);
-  assert.match(response.data.embeds[0].description, /📌 Blue Rose/);
-  assert.match(response.data.embeds[0].description, /📌 Gold Lily/);
+  assert.match(response.data.embeds[0].description, /📌 Blue Rose \(<:R:1524529635256307852>, 22 pts \(\+2\)\)/);
+  assert.match(response.data.embeds[0].description, /📌 Gold Lily \(<:SSR:1524529771227381941>, 80 pts\)/);
   assert.doesNotMatch(response.data.embeds[0].description, /- Blue Rose/);
 });
 
