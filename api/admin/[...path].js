@@ -1,10 +1,12 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { getSql } from '../../lib/db/client.js';
+import { normalizeSearchText } from '../../lib/flowers/search.js';
 import { shouldBlockAdminSurface } from '../../lib/http/hosts.js';
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const SESSION_COOKIE = 'sn_admin_session';
 const STATE_COOKIE = 'sn_admin_state';
+const RARITIES = ['N', 'R', 'SR', 'SSR', 'UR'];
 
 function send(res, status, body, headers = {}) {
   res.statusCode = status;
@@ -214,6 +216,7 @@ function layout({ title, admin, body, notice }) {
       <span class="links">
         <a href="/cozy-players">Cozy Players</a>
         <a href="/discord-users">Discord Users</a>
+        <a href="/flowers">Flowers</a>
         ${admin ? `<span class="muted">${htmlEscape(admin.game_name || admin.discord_user_id)}</span><a href="/logout">Logout</a>` : ''}
       </span>
     </nav>
@@ -346,6 +349,7 @@ function dashboardPage(admin, stats) {
   <p class="muted">Choose an admin area.</p>
   <a class="button" href="/cozy-players">Manage Cozy Players</a>
   <a class="button secondary" href="/discord-users">Manage Discord Users</a>
+  <a class="button secondary" href="/flowers">Manage Flowers</a>
 </section>`,
   });
 }
@@ -361,6 +365,72 @@ function flowerOptions(flowers) {
   return '<option value="" disabled selected>Select flower</option>' + flowers
     .map((flower) => `<option value="${htmlEscape(flower.id)}">${htmlEscape(flower.name)} (${htmlEscape(flower.rarity)}, ${flower.quest_points} pts)</option>`)
     .join('');
+}
+
+function rarityOptions(selectedRarity) {
+  return `<option value="" disabled${selectedRarity ? '' : ' selected'}>Select rarity</option>` + RARITIES
+    .map((rarity) => `<option value="${rarity}"${rarity === selectedRarity ? ' selected' : ''}>${rarity}</option>`)
+    .join('');
+}
+
+function optionalNumberValue(value) {
+  return value === null || value === undefined ? '' : String(value);
+}
+
+function flowerManagementPage({ admin, flowers, notice }) {
+  return layout({
+    title: 'Flower Management',
+    admin,
+    notice,
+    body: `<h1>Flower Management</h1>
+<section class="panel">
+  <h2>Add Flower</h2>
+  <form method="post" action="/flowers">
+    <input type="hidden" name="action" value="add_flower">
+    <div class="grid">
+      <label>Name<input name="name" maxlength="100" required></label>
+      <label>Rarity<select name="rarity" required>${rarityOptions()}</select></label>
+      <label>Quest points<input name="quest_points" type="number" min="0" step="1" required></label>
+      <label>Assignment level<input name="assignment_level" type="number" min="0" step="1"></label>
+      <label>Image URL<input name="image_url" type="url"></label>
+    </div>
+    <p><button type="submit">Add Flower</button></p>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Existing Flowers</h2>
+  ${flowers.length ? `<table>
+    <thead><tr><th>Name</th><th>Rarity</th><th>Quest Points</th><th>Assignment Level</th><th>Image URL</th><th>Actions</th></tr></thead>
+    <tbody>
+      ${flowers.map((flower) => {
+        const deleteConfirmation = `Delete flower ${flower.name}?\n\nThis will remove the flower from the database, including all player logs and pins for it.`;
+        return `<tr>
+          <td>
+            <form id="flower-${htmlEscape(flower.id)}-update" method="post" action="/flowers">
+              <input type="hidden" name="action" value="update_flower">
+              <input type="hidden" name="flower_id" value="${htmlEscape(flower.id)}">
+              <input name="name" maxlength="100" value="${htmlEscape(flower.name)}" required>
+            </form>
+          </td>
+          <td><select form="flower-${htmlEscape(flower.id)}-update" name="rarity" required>${rarityOptions(flower.rarity)}</select></td>
+          <td><input form="flower-${htmlEscape(flower.id)}-update" name="quest_points" type="number" min="0" step="1" value="${flower.quest_points}" required></td>
+          <td><input form="flower-${htmlEscape(flower.id)}-update" name="assignment_level" type="number" min="0" step="1" value="${htmlEscape(optionalNumberValue(flower.assignment_level))}"></td>
+          <td><input form="flower-${htmlEscape(flower.id)}-update" name="image_url" type="url" value="${htmlEscape(flower.image_url ?? '')}"></td>
+          <td class="actions">
+            <button form="flower-${htmlEscape(flower.id)}-update" class="secondary" type="submit">Update</button>
+            <form method="post" action="/flowers" onsubmit="return confirm(${htmlEscape(jsStringLiteral(deleteConfirmation))})">
+              <input type="hidden" name="action" value="delete_flower">
+              <input type="hidden" name="flower_id" value="${htmlEscape(flower.id)}">
+              <button class="danger" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>` : '<p class="muted">No flowers found.</p>'}
+</section>`,
+  });
 }
 
 function userManagementPage({ admin, title, path, players, flowers, selectedPlayerId, loggedFlowers, notice, allowCreate = false }) {
@@ -613,6 +683,149 @@ async function loadDashboardStats(sql) {
     topCollectors,
     recentLogs,
   };
+}
+
+async function loadFlowerPageData(sql) {
+  const flowers = await sql`
+    select id, name, rarity, quest_points, assignment_level, image_url
+    from flowers
+    order by lower(name), name
+  `;
+
+  return { flowers };
+}
+
+function flowerFormValues(form) {
+  const name = form.get('name')?.trim();
+  const normalizedName = normalizeSearchText(name ?? '');
+  const rarity = form.get('rarity');
+  const questPoints = Number(form.get('quest_points'));
+  const assignmentLevelValue = form.get('assignment_level')?.trim();
+  const assignmentLevel = assignmentLevelValue ? Number(assignmentLevelValue) : null;
+  const imageUrl = form.get('image_url')?.trim() || null;
+
+  if (!name || !normalizedName) {
+    return { error: 'Please enter a flower name.' };
+  }
+
+  if (!RARITIES.includes(rarity)) {
+    return { error: 'Please choose a valid rarity.' };
+  }
+
+  if (!Number.isInteger(questPoints) || questPoints < 0) {
+    return { error: 'Quest points must be a whole number of 0 or more.' };
+  }
+
+  if (assignmentLevel !== null && (!Number.isInteger(assignmentLevel) || assignmentLevel < 0)) {
+    return { error: 'Assignment level must be blank or a whole number of 0 or more.' };
+  }
+
+  return { name, normalizedName, rarity, questPoints, assignmentLevel, imageUrl };
+}
+
+async function addFlower(sql, form) {
+  const values = flowerFormValues(form);
+  if (values.error) {
+    return values.error;
+  }
+
+  const [existing] = await sql`
+    select name
+    from flowers
+    where normalized_name = ${values.normalizedName}
+    limit 1
+  `;
+  if (existing) {
+    return `${values.name} was not added because ${existing.name} already exists.`;
+  }
+
+  await sql`
+    insert into flowers (name, normalized_name, rarity, quest_points, assignment_level, image_url)
+    values (${values.name}, ${values.normalizedName}, ${values.rarity}, ${values.questPoints}, ${values.assignmentLevel}, ${values.imageUrl})
+  `;
+
+  return `${values.name} was added.`;
+}
+
+async function updateFlower(sql, form) {
+  const flowerId = form.get('flower_id');
+  const values = flowerFormValues(form);
+  if (values.error) {
+    return values.error;
+  }
+
+  const [flower] = await sql`
+    select id, name
+    from flowers
+    where id = ${flowerId}
+    limit 1
+  `;
+  if (!flower) {
+    return 'Please choose a valid flower.';
+  }
+
+  const [duplicate] = await sql`
+    select name
+    from flowers
+    where normalized_name = ${values.normalizedName}
+      and id <> ${flowerId}
+    limit 1
+  `;
+  if (duplicate) {
+    return `${values.name} was not saved because ${duplicate.name} already exists.`;
+  }
+
+  await sql`
+    update flowers
+    set name = ${values.name},
+        normalized_name = ${values.normalizedName},
+        rarity = ${values.rarity},
+        quest_points = ${values.questPoints},
+        assignment_level = ${values.assignmentLevel},
+        image_url = ${values.imageUrl}
+    where id = ${flowerId}
+  `;
+
+  return `${values.name} was updated.`;
+}
+
+async function deleteManagedFlower(sql, form) {
+  const flowerId = form.get('flower_id');
+  const [flower] = await sql`
+    select
+      name,
+      (select count(*)::int from flower_logs where flower_id = ${flowerId}) as logged_flowers,
+      (select count(*)::int from flower_pins where flower_id = ${flowerId}) as pins
+    from flowers
+    where id = ${flowerId}
+    limit 1
+  `;
+  if (!flower) {
+    return 'Please choose a valid flower.';
+  }
+
+  await sql`delete from flowers where id = ${flowerId}`;
+
+  return `Removed ${flower.name}. Deleted ${flower.logged_flowers ?? 0} logged flower${flower.logged_flowers === 1 ? '' : 's'} and ${flower.pins ?? 0} pin${flower.pins === 1 ? '' : 's'}.`;
+}
+
+async function handleFlowerPost(req, sql) {
+  const form = await formData(req);
+  const action = form.get('action');
+
+  if (action === 'add_flower') {
+    return addFlower(sql, form);
+  }
+
+  if (action === 'update_flower') {
+    return updateFlower(sql, form);
+  }
+
+  if (action === 'delete_flower') {
+    return deleteManagedFlower(sql, form);
+  }
+
+  return 'Unknown action.';
 }
 
 async function createPlayer(sql, form) {
@@ -886,6 +1099,20 @@ export function createAdminHandler({ sqlFactory = getSql, fetchImpl = fetch } = 
 
       if ((path === '/' || path === '/dashboard') && req.method === 'GET') {
         sendHtml(res, 200, dashboardPage(admin, await loadDashboardStats(sql)));
+        return;
+      }
+
+      if (path === '/flowers') {
+        let notice = new URL(req.url, adminBaseUrl(req)).searchParams.get('notice');
+        if (req.method === 'POST') {
+          notice = await handleFlowerPost(req, sql);
+        } else if (req.method !== 'GET') {
+          send(res, 405, 'Method not allowed', { Allow: 'GET, POST' });
+          return;
+        }
+
+        const data = await loadFlowerPageData(sql);
+        sendHtml(res, 200, flowerManagementPage({ admin, notice, ...data }));
         return;
       }
 

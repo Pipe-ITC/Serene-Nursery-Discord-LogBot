@@ -115,6 +115,210 @@ test('dashboard renders admin summary stats and activity lists', async () => {
   assert.match(res.body, /22 \(\+2\)/);
 });
 
+test('flower management page renders add and edit controls', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes('from flowers')) {
+        return [{ id: 'flower-1', name: 'Red Rose', rarity: 'R', quest_points: 20, assignment_level: 3, image_url: 'https://cdn.example/red-rose.png' }];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(request({ url: '/flowers', cookie: withAdminSession() }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Flower Management/);
+  assert.match(res.body, /Add Flower/);
+  assert.match(res.body, /<option value="" disabled selected>Select rarity<\/option>/);
+  assert.match(res.body, /Red Rose/);
+  assert.match(res.body, /name="quest_points" type="number" min="0" step="1" value="20"/);
+  assert.match(res.body, /Delete flower Red Rose\?/);
+});
+
+test('flower management page adds flowers', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  const queries = [];
+  const valuesSeen = [];
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      queries.push(query);
+      valuesSeen.push(...values);
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes('where normalized_name =')) {
+        return [];
+      }
+      if (query.includes('from flowers')) {
+        return [];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(
+    request({
+      method: 'POST',
+      url: '/flowers',
+      cookie: withAdminSession(),
+      body: new URLSearchParams({
+        action: 'add_flower',
+        name: 'Blue Rose',
+        rarity: 'R',
+        quest_points: '20',
+        assignment_level: '2',
+        image_url: 'https://cdn.example/blue-rose.png',
+      }).toString(),
+    }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Blue Rose was added/);
+  assert.ok(queries.some((query) => query.includes('insert into flowers')));
+  assert.ok(valuesSeen.includes('blue rose'));
+  assert.ok(valuesSeen.includes(20));
+  assert.ok(valuesSeen.includes(2));
+});
+
+test('flower management page updates flowers and blocks duplicate names', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  const queries = [];
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      queries.push(query);
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes('where id =') && values.includes('flower-1')) {
+        return [{ id: 'flower-1', name: 'Red Rose' }];
+      }
+      if (query.includes('where normalized_name =') && query.includes('and id <>')) {
+        return [];
+      }
+      if (query.includes('from flowers')) {
+        return [{ id: 'flower-1', name: 'Blue Rose', rarity: 'R', quest_points: 22, assignment_level: null, image_url: null }];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(
+    request({
+      method: 'POST',
+      url: '/flowers',
+      cookie: withAdminSession(),
+      body: new URLSearchParams({
+        action: 'update_flower',
+        flower_id: 'flower-1',
+        name: 'Blue Rose',
+        rarity: 'R',
+        quest_points: '22',
+        assignment_level: '',
+        image_url: '',
+      }).toString(),
+    }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Blue Rose was updated/);
+  assert.ok(queries.some((query) => query.includes('update flowers')));
+
+  const duplicateHandler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes('where id =') && values.includes('flower-1')) {
+        return [{ id: 'flower-1', name: 'Red Rose' }];
+      }
+      if (query.includes('where normalized_name =') && query.includes('and id <>')) {
+        return [{ name: 'Existing Rose' }];
+      }
+      if (query.includes('from flowers')) {
+        return [];
+      }
+
+      return [];
+    },
+  });
+  const duplicateRes = mockResponse();
+
+  await duplicateHandler(
+    request({
+      method: 'POST',
+      url: '/flowers',
+      cookie: withAdminSession(),
+      body: new URLSearchParams({
+        action: 'update_flower',
+        flower_id: 'flower-1',
+        name: 'Existing Rose',
+        rarity: 'R',
+        quest_points: '22',
+      }).toString(),
+    }),
+    duplicateRes,
+  );
+
+  assert.equal(duplicateRes.statusCode, 200);
+  assert.match(duplicateRes.body, /Existing Rose was not saved because Existing Rose already exists/);
+});
+
+test('flower management page deletes flowers with cascade counts', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  const queries = [];
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      queries.push(query);
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes('select') && query.includes('flower_logs') && query.includes('flower_pins')) {
+        return [{ name: 'Red Rose', logged_flowers: 4, pins: 2 }];
+      }
+      if (query.includes('from flowers')) {
+        return [];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(
+    request({
+      method: 'POST',
+      url: '/flowers',
+      cookie: withAdminSession(),
+      body: new URLSearchParams({ action: 'delete_flower', flower_id: 'flower-1' }).toString(),
+    }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Removed Red Rose/);
+  assert.match(res.body, /4 logged flowers/);
+  assert.match(res.body, /2 pins/);
+  assert.ok(queries.some((query) => query.includes('delete from flowers')));
+});
+
 test('cozy players page requires an admin session and renders dashboard controls', async () => {
   process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
   const handler = createAdminHandler({
