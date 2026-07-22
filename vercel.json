@@ -34,6 +34,10 @@
     {
       "source": "/discord-users",
       "destination": "/api/admin/discord-users"
+    },
+    {
+      "source": "/flowers",
+      "destination": "/api/admin/flowers"
     }
   ],
   "crons": [

@@ -23,5 +23,6 @@ test('rewrites admin dashboard paths to the admin function', async () => {
     { source: '/logout', destination: '/api/admin/logout' },
     { source: '/cozy-players', destination: '/api/admin/cozy-players' },
     { source: '/discord-users', destination: '/api/admin/discord-users' },
+    { source: '/flowers', destination: '/api/admin/flowers' },
   ]);
 });
