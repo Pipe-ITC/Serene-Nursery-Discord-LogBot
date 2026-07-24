@@ -13,6 +13,12 @@ test('schedules weekly done reset for Monday 10:00 UTC', async () => {
   ]);
 });
 
+test('allows longer admin portal requests', async () => {
+  const config = JSON.parse(await readFile('vercel.json', 'utf8'));
+
+  assert.equal(config.functions['api/admin/[...path].js'].maxDuration, 30);
+});
+
 test('rewrites admin dashboard paths to the admin function', async () => {
   const config = JSON.parse(await readFile('vercel.json', 'utf8'));
 

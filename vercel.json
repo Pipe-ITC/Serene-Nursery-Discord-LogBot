@@ -7,7 +7,7 @@
       "maxDuration": 10
     },
     "api/admin/[...path].js": {
-      "maxDuration": 10
+      "maxDuration": 30
     }
   },
   "rewrites": [

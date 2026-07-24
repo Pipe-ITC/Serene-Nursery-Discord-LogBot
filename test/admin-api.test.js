@@ -438,7 +438,7 @@ test('cozy players page logs selected rarity flowers for a player', async () => 
         return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
       }
       if (query.includes('insert into flower_logs')) {
-        return Object.assign([{ id: values.at(-1) }], { count: 1 });
+        return Object.assign([{ id: 'flower-1' }, { id: 'flower-2' }], { count: 2 });
       }
       if (query.includes("discord_user_id like 'cozy:%'") && values.includes('cozy:player-1')) {
         return [{ discord_user_id: 'cozy:player-1', game_name: 'Frosty' }];
@@ -475,9 +475,8 @@ test('cozy players page logs selected rarity flowers for a player', async () => 
   assert.equal(res.statusCode, 200);
   assert.match(res.body, /Logged 2 flowers for Frosty/);
   assert.match(res.body, /<option value="cozy:player-1" selected>Frosty<\/option>/);
-  assert.equal(queries.filter((query) => query.includes('insert into flower_logs')).length, 2);
-  assert.ok(valuesSeen.includes('flower-1'));
-  assert.ok(valuesSeen.includes('flower-2'));
+  assert.equal(queries.filter((query) => query.includes('insert into flower_logs')).length, 1);
+  assert.ok(queries.some((query) => query.includes('where id in')));
 });
 
 test('cozy players page deletes a player and cascaded flower data', async () => {

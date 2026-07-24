@@ -977,21 +977,17 @@ async function logFlowersByRarity(sql, form, playerType) {
     return 'Please choose at least one flower to log.';
   }
 
-  let logged = 0;
-  for (const flowerId of flowerIds) {
-    const result = await sql`
-      insert into flower_logs (discord_user_id, flower_id, extra_points, logged_at)
-      select ${playerId}, id, 0, now()
-      from flowers
-      where id = ${flowerId}
-      on conflict (discord_user_id, flower_id) do update set
-        logged_at = excluded.logged_at
-      returning id
-    `;
-    logged += result.count;
-  }
+  const result = await sql`
+    insert into flower_logs (discord_user_id, flower_id, extra_points, logged_at)
+    select ${playerId}, id, 0, now()
+    from flowers
+    where id in ${sql(flowerIds)}
+    on conflict (discord_user_id, flower_id) do update set
+      logged_at = excluded.logged_at
+    returning id
+  `;
 
-  return `Logged ${logged} flower${logged === 1 ? '' : 's'} for ${player.game_name}.`;
+  return `Logged ${result.count} flower${result.count === 1 ? '' : 's'} for ${player.game_name}.`;
 }
 
 async function logFlowersByLevel(sql, form, playerType) {
