@@ -385,6 +385,9 @@ test('cozy players page shows selected player details after view', async () => {
   assert.equal(res.statusCode, 200);
   assert.match(res.body, /<option value="" disabled>Select player<\/option>/);
   assert.match(res.body, /<option value="cozy:player-1" selected>Frosty<\/option>/);
+  assert.match(res.body, /name="action" value="update_extra_points"/);
+  assert.match(res.body, /name="extra_points" type="number" min="0" max="4" step="1" value="2"/);
+  assert.match(res.body, /Save Points/);
   assert.match(res.body, /Unpin/);
   assert.match(res.body, /Delete player Frosty\?/);
 });
@@ -662,6 +665,58 @@ test('discord users page logs assignment-level flowers for an existing Discord u
   assert.match(res.body, /Logged 3 assignment-level flowers for Rose Keeper/);
   assert.match(res.body, /<option value="discord-user-1" selected>Rose Keeper<\/option>/);
   assert.ok(queries.some((query) => query.includes('assignment_level <=')));
+  assert.ok(valuesSeen.includes(4));
+});
+
+test('discord users page updates extra points for a logged flower', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  const queries = [];
+  const valuesSeen = [];
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      queries.push(query);
+      valuesSeen.push(...values);
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes("discord_user_id not like 'cozy:%'") && values.includes('discord-user-1')) {
+        return [{ discord_user_id: 'discord-user-1', game_name: 'Rose Keeper' }];
+      }
+      if (query.includes('from flower_logs l') && query.includes('join flowers f') && values.includes('flower-1')) {
+        return [{ name: 'Red Rose' }];
+      }
+      if (query.includes("discord_user_id not like 'cozy:%'")) {
+        return [{ discord_user_id: 'discord-user-1', game_name: 'Rose Keeper' }];
+      }
+      if (query.includes('from flowers')) {
+        return [{ id: 'flower-1', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(
+    request({
+      method: 'POST',
+      url: '/discord-users',
+      cookie: withAdminSession(),
+      body: new URLSearchParams({
+        action: 'update_extra_points',
+        player_id: 'discord-user-1',
+        flower_id: 'flower-1',
+        extra_points: '4',
+      }).toString(),
+    }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Updated Red Rose extra points for Rose Keeper/);
+  assert.match(res.body, /<option value="discord-user-1" selected>Rose Keeper<\/option>/);
+  assert.ok(queries.some((query) => query.includes('update flower_logs') && query.includes('set extra_points')));
   assert.ok(valuesSeen.includes(4));
 });
 

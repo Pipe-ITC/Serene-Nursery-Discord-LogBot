@@ -210,6 +210,8 @@ function layout({ title, admin, body, notice }) {
     th, td { padding: 10px 8px; border-bottom: 1px solid #303442; text-align: left; vertical-align: middle; }
     th { color: #cbd5e1; }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .actions form { display: flex; gap: 8px; align-items: center; }
+    .actions input[type="number"] { width: 76px; }
     .notice { border-left: 4px solid #ff66c4; background: #2a2233; padding: 12px 14px; border-radius: 6px; margin-bottom: 18px; }
     .muted { color: #9ca3af; }
   </style>
@@ -540,6 +542,13 @@ ${createSection}
         <td>${Number(row.quest_points) + Number(row.extra_points ?? 0)}${Number(row.extra_points ?? 0) > 0 ? ` (+${row.extra_points})` : ''}</td>
         <td>${row.is_pinned ? 'Yes' : 'No'}</td>
         <td class="actions">
+          <form method="post" action="${path}">
+            <input type="hidden" name="action" value="update_extra_points">
+            <input type="hidden" name="player_id" value="${htmlEscape(selectedPlayerId)}">
+            <input type="hidden" name="flower_id" value="${htmlEscape(row.id)}">
+            <input name="extra_points" type="number" min="0" max="4" step="1" value="${Number(row.extra_points ?? 0)}" aria-label="Extra points for ${htmlEscape(row.name)}">
+            <button class="secondary" type="submit">Save Points</button>
+          </form>
           <form method="post" action="${path}">
             <input type="hidden" name="action" value="toggle_pin">
             <input type="hidden" name="player_id" value="${htmlEscape(selectedPlayerId)}">
@@ -1032,6 +1041,41 @@ async function deleteFlower(sql, form, playerType) {
   return 'Flower log removed.';
 }
 
+async function updateExtraPoints(sql, form, playerType) {
+  const playerId = form.get('player_id');
+  const flowerId = form.get('flower_id');
+  const extraPoints = validExtraPoints(form.get('extra_points'));
+  if (extraPoints === undefined) {
+    return 'Extra points must be 0, 1, 2, 3, or 4.';
+  }
+
+  const player = await assertManagedPlayer(sql, playerId, playerType);
+  if (!player) {
+    return playerType === 'cozy' ? 'Please choose a valid Cozy player.' : 'Please choose a valid Discord user.';
+  }
+
+  const [flower] = await sql`
+    select f.name
+    from flower_logs l
+    join flowers f on f.id = l.flower_id
+    where l.discord_user_id = ${playerId}
+      and l.flower_id = ${flowerId}
+    limit 1
+  `;
+  if (!flower) {
+    return 'Please choose a logged flower.';
+  }
+
+  await sql`
+    update flower_logs
+    set extra_points = ${extraPoints}
+    where discord_user_id = ${playerId}
+      and flower_id = ${flowerId}
+  `;
+
+  return `Updated ${flower.name} extra points for ${player.game_name}.`;
+}
+
 async function togglePin(sql, form, playerType) {
   const playerId = form.get('player_id');
   const flowerId = form.get('flower_id');
@@ -1116,6 +1160,10 @@ async function handlePlayerPost(req, sql, playerType) {
   }
   if (action === 'delete_flower') {
     notice = await deleteFlower(sql, form, playerType);
+    return { notice, selectedPlayerId };
+  }
+  if (action === 'update_extra_points') {
+    notice = await updateExtraPoints(sql, form, playerType);
     return { notice, selectedPlayerId };
   }
   if (action === 'toggle_pin') {
