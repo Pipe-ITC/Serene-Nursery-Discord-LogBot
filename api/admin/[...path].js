@@ -172,6 +172,22 @@ function routePath(req) {
 }
 
 function layout({ title, admin, body, notice }) {
+  const isDevelopment = (process.env.APP_ENVIRONMENT ?? 'development').trim().toLowerCase() !== 'production';
+  const watermarkClass = isDevelopment ? ' development-watermark' : '';
+  const watermarkStyles = isDevelopment
+    ? `
+    body.development-watermark::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.14;
+      background-image: repeating-linear-gradient(-28deg, transparent 0 100px, rgba(255, 102, 196, 0.08) 100px 150px, transparent 150px 260px), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='220' viewBox='0 0 360 220'%3E%3Cg transform='translate(180 110) rotate(-28)'%3E%3Ctext x='0' y='0' text-anchor='middle' dominant-baseline='middle' fill='%23ffffff' fill-opacity='0.55' font-family='Arial, sans-serif' font-size='38' font-weight='800' letter-spacing='4'%3EDEVELOPMENT%3C/text%3E%3C/g%3E%3C/svg%3E");
+      background-size: 360px 220px;
+    }`
+    : '';
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -181,6 +197,8 @@ function layout({ title, admin, body, notice }) {
   <style>
     :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #15171f; color: #f3f4f6; }
     body { margin: 0; background: #15171f; }
+    ${watermarkStyles}
+    header, main { position: relative; z-index: 1; }
     header { border-bottom: 1px solid #303442; background: #1f2230; }
     nav { max-width: 1120px; margin: 0 auto; padding: 16px 20px; display: flex; gap: 16px; align-items: center; justify-content: space-between; }
     nav a { color: #dbeafe; text-decoration: none; font-weight: 650; }
@@ -216,7 +234,7 @@ function layout({ title, admin, body, notice }) {
     .muted { color: #9ca3af; }
   </style>
 </head>
-<body>
+<body class="${watermarkClass.trim()}">
   <header>
     <nav>
       <a href="/">Serene Nursery Admin</a>

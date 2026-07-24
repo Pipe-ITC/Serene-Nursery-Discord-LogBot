@@ -47,6 +47,7 @@ test('admin surface rejects the bot host', async () => {
 
 test('dashboard renders admin summary stats and activity lists', async () => {
   process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  process.env.APP_ENVIRONMENT = 'development';
   const handler = createAdminHandler({
     sqlFactory: () => async (strings, ...values) => {
       const query = strings.join(' ');
@@ -98,6 +99,8 @@ test('dashboard renders admin summary stats and activity lists', async () => {
 
   assert.equal(res.statusCode, 200);
   assert.match(res.body, /Player Summary/);
+  assert.match(res.body, /body class="development-watermark"/);
+  assert.match(res.body, /DEVELOPMENT/);
   assert.match(res.body, /Discord players/);
   assert.match(res.body, />7</);
   assert.match(res.body, /Cozy players/);
@@ -113,6 +116,40 @@ test('dashboard renders admin summary stats and activity lists', async () => {
   assert.match(res.body, /Recent Activity/);
   assert.match(res.body, /Blue Rose/);
   assert.match(res.body, /22 \(\+2\)/);
+});
+
+test('production admin pages do not render the development watermark', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  process.env.APP_ENVIRONMENT = 'production';
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes('as discord_players')) {
+        return [{
+          discord_players: 0,
+          cozy_players: 0,
+          active_players: 0,
+          total_flowers: 0,
+          unowned_flowers: 0,
+          total_logs: 0,
+          total_pins: 0,
+          done_count: 0,
+        }];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(request({ url: '/dashboard', cookie: withAdminSession() }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.doesNotMatch(res.body, /body class="development-watermark"/);
+  assert.doesNotMatch(res.body, /DEVELOPMENT/);
 });
 
 test('flower management page renders add and edit controls', async () => {
