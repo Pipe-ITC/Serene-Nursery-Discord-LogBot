@@ -56,6 +56,9 @@ test('hides admin commands from non-admin help output', async () => {
 });
 
 test('shows admin commands to app admins in help output', async () => {
+  delete process.env.ADMIN_BASE_URL;
+  process.env.APP_ENVIRONMENT = 'development';
+
   const response = await handleInteraction(
     {
       type: InteractionType.APPLICATION_COMMAND,
@@ -75,6 +78,27 @@ test('shows admin commands to app admins in help output', async () => {
   assert.match(response.data.content, /\/removeuser <user>/);
   assert.match(response.data.content, /\/donereset/);
   assert.match(response.data.content, /https:\/\/admin\.serenenursery\.pipeitc\.dev/);
+});
+
+test('shows production admin dashboard link when running in production', async () => {
+  delete process.env.ADMIN_BASE_URL;
+  process.env.APP_ENVIRONMENT = 'production';
+
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'admin-1' } },
+      data: { name: 'help' },
+    },
+    {
+      sql: async () => [{ is_admin: true }],
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /https:\/\/admin\.serenenursery\.pipeitc\.net/);
+  assert.doesNotMatch(response.data.content, /https:\/\/admin\.serenenursery\.pipeitc\.dev/);
 });
 
 test('blocks flower commands until the user has set a game name', async () => {
