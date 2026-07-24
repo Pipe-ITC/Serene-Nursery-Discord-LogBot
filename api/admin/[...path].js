@@ -196,6 +196,11 @@ function layout({ title, admin, body, notice }) {
     .split { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
     .list { margin: 0; padding-left: 20px; }
     .list li { margin: 8px 0; }
+    .checkbox-list { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .checkbox-list label { display: flex; gap: 8px; align-items: center; }
+    .checkbox-list input { width: auto; }
+    fieldset { border: 1px solid #303442; border-radius: 8px; margin: 14px 0; padding: 12px; }
+    legend { color: #cbd5e1; font-weight: 700; padding: 0 6px; }
     label { display: grid; gap: 6px; color: #cbd5e1; font-size: 14px; }
     input, select { box-sizing: border-box; width: 100%; border: 1px solid #4b5563; background: #111827; color: #f9fafb; border-radius: 6px; padding: 10px 11px; font: inherit; }
     button, .button { border: 0; background: #ff66c4; color: #111827; padding: 10px 14px; border-radius: 6px; font: inherit; font-weight: 750; cursor: pointer; text-decoration: none; display: inline-block; }
@@ -367,6 +372,24 @@ function flowerOptions(flowers) {
     .join('');
 }
 
+function flowerCheckboxesByRarity(flowers) {
+  return RARITIES
+    .map((rarity) => {
+      const rarityFlowers = flowers.filter((flower) => flower.rarity === rarity);
+      if (rarityFlowers.length === 0) {
+        return '';
+      }
+
+      return `<fieldset>
+        <legend>${rarity} (${rarityFlowers.length})</legend>
+        <div class="checkbox-list">
+          ${rarityFlowers.map((flower) => `<label><input type="checkbox" name="flower_ids" value="${htmlEscape(flower.id)}">${htmlEscape(flower.name)} (${flower.quest_points} pts)</label>`).join('')}
+        </div>
+      </fieldset>`;
+    })
+    .join('');
+}
+
 function rarityOptions(selectedRarity) {
   return `<option value="" disabled${selectedRarity ? '' : ' selected'}>Select rarity</option>` + RARITIES
     .map((rarity) => `<option value="${rarity}"${rarity === selectedRarity ? ' selected' : ''}>${rarity}</option>`)
@@ -471,6 +494,28 @@ ${createSection}
       <label>Extra points<input name="extra_points" type="number" min="0" max="4" step="1" value="0"></label>
     </div>
     <p><button type="submit"${players.length ? '' : ' disabled'}>Log Flower</button></p>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Log Flowers by Rarity</h2>
+  <form method="post" action="${path}">
+    <input type="hidden" name="action" value="log_by_rarity">
+    <label>Player${playerSelect}</label>
+    ${flowers.length ? flowerCheckboxesByRarity(flowers) : '<p class="muted">No flowers available.</p>'}
+    <p><button type="submit"${players.length && flowers.length ? '' : ' disabled'}>Log Selected Flowers</button></p>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Log Flowers by Level</h2>
+  <form method="post" action="${path}">
+    <input type="hidden" name="action" value="log_by_level">
+    <div class="grid">
+      <label>Player${playerSelect}</label>
+      <label>Assignment level<input name="level" type="number" min="0" step="1" required></label>
+    </div>
+    <p><button type="submit"${players.length ? '' : ' disabled'}>Log Level Flowers</button></p>
   </form>
 </section>
 
@@ -920,6 +965,61 @@ async function logFlower(sql, form, playerType) {
   return `Logged ${flower.name} for ${player.game_name}.`;
 }
 
+async function logFlowersByRarity(sql, form, playerType) {
+  const playerId = form.get('player_id');
+  const flowerIds = [...new Set(form.getAll('flower_ids').map((id) => id.trim()).filter(Boolean))];
+  const player = await assertManagedPlayer(sql, playerId, playerType);
+  if (!player) {
+    return playerType === 'cozy' ? 'Please choose a valid Cozy player.' : 'Please choose a valid Discord user.';
+  }
+
+  if (flowerIds.length === 0) {
+    return 'Please choose at least one flower to log.';
+  }
+
+  let logged = 0;
+  for (const flowerId of flowerIds) {
+    const result = await sql`
+      insert into flower_logs (discord_user_id, flower_id, extra_points, logged_at)
+      select ${playerId}, id, 0, now()
+      from flowers
+      where id = ${flowerId}
+      on conflict (discord_user_id, flower_id) do update set
+        logged_at = excluded.logged_at
+      returning id
+    `;
+    logged += result.count;
+  }
+
+  return `Logged ${logged} flower${logged === 1 ? '' : 's'} for ${player.game_name}.`;
+}
+
+async function logFlowersByLevel(sql, form, playerType) {
+  const playerId = form.get('player_id');
+  const level = Number(form.get('level'));
+  const player = await assertManagedPlayer(sql, playerId, playerType);
+  if (!player) {
+    return playerType === 'cozy' ? 'Please choose a valid Cozy player.' : 'Please choose a valid Discord user.';
+  }
+
+  if (!Number.isInteger(level) || level < 0) {
+    return 'Level must be a whole number of 0 or more.';
+  }
+
+  const result = await sql`
+    insert into flower_logs (discord_user_id, flower_id, extra_points, logged_at)
+    select ${playerId}, id, 0, now()
+    from flowers
+    where assignment_level is not null
+      and assignment_level <= ${level}
+    on conflict (discord_user_id, flower_id) do update set
+      logged_at = excluded.logged_at
+    returning id
+  `;
+
+  return `Logged ${result.count} assignment-level flower${result.count === 1 ? '' : 's'} for ${player.game_name}.`;
+}
+
 async function deleteFlower(sql, form, playerType) {
   const playerId = form.get('player_id');
   const flowerId = form.get('flower_id');
@@ -1008,6 +1108,14 @@ async function handlePlayerPost(req, sql, playerType) {
   }
   if (action === 'log_flower') {
     notice = await logFlower(sql, form, playerType);
+    return { notice, selectedPlayerId };
+  }
+  if (action === 'log_by_rarity') {
+    notice = await logFlowersByRarity(sql, form, playerType);
+    return { notice, selectedPlayerId };
+  }
+  if (action === 'log_by_level') {
+    notice = await logFlowersByLevel(sql, form, playerType);
     return { notice, selectedPlayerId };
   }
   if (action === 'delete_flower') {

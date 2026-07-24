@@ -349,6 +349,9 @@ test('cozy players page requires an admin session and renders dashboard controls
   assert.match(res.body, /Frosty/);
   assert.match(res.body, /<option value="" disabled selected>Select player<\/option>/);
   assert.match(res.body, /<option value="" disabled selected>Select flower<\/option>/);
+  assert.match(res.body, /Log Flowers by Rarity/);
+  assert.match(res.body, /Log Flowers by Level/);
+  assert.match(res.body, /<input type="checkbox" name="flower_ids" value="flower-1">Red Rose \(20 pts\)/);
   assert.match(res.body, /Red Rose/);
   assert.doesNotMatch(res.body, /Unpin/);
   assert.doesNotMatch(res.body, /Delete player Frosty\?/);
@@ -420,6 +423,61 @@ test('cozy players page creates players with a cozy uuid id', async () => {
   assert.equal(res.statusCode, 200);
   assert.match(res.body, /Frosty was created/);
   assert.ok(valuesSeen.some((value) => typeof value === 'string' && /^cozy:[0-9a-f-]{36}$/.test(value)));
+});
+
+test('cozy players page logs selected rarity flowers for a player', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  const queries = [];
+  const valuesSeen = [];
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      queries.push(query);
+      valuesSeen.push(...values);
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes('insert into flower_logs')) {
+        return Object.assign([{ id: values.at(-1) }], { count: 1 });
+      }
+      if (query.includes("discord_user_id like 'cozy:%'") && values.includes('cozy:player-1')) {
+        return [{ discord_user_id: 'cozy:player-1', game_name: 'Frosty' }];
+      }
+      if (query.includes("discord_user_id like 'cozy:%'")) {
+        return [{ discord_user_id: 'cozy:player-1', game_name: 'Frosty' }];
+      }
+      if (query.includes('from flowers')) {
+        return [
+          { id: 'flower-1', name: 'Red Rose', rarity: 'R', quest_points: 20 },
+          { id: 'flower-2', name: 'Blue Rose', rarity: 'R', quest_points: 22 },
+        ];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(
+    request({
+      method: 'POST',
+      cookie: withAdminSession(),
+      body: new URLSearchParams([
+        ['action', 'log_by_rarity'],
+        ['player_id', 'cozy:player-1'],
+        ['flower_ids', 'flower-1'],
+        ['flower_ids', 'flower-2'],
+      ]).toString(),
+    }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Logged 2 flowers for Frosty/);
+  assert.match(res.body, /<option value="cozy:player-1" selected>Frosty<\/option>/);
+  assert.equal(queries.filter((query) => query.includes('insert into flower_logs')).length, 2);
+  assert.ok(valuesSeen.includes('flower-1'));
+  assert.ok(valuesSeen.includes('flower-2'));
 });
 
 test('cozy players page deletes a player and cascaded flower data', async () => {
@@ -555,6 +613,57 @@ test('discord users page logs flowers for an existing Discord user', async () =>
   assert.ok(queries.some((query) => query.includes('insert into flower_logs')));
   assert.ok(valuesSeen.includes('discord-user-1'));
   assert.ok(valuesSeen.includes(3));
+});
+
+test('discord users page logs assignment-level flowers for an existing Discord user', async () => {
+  process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
+  const queries = [];
+  const valuesSeen = [];
+  const handler = createAdminHandler({
+    sqlFactory: () => async (strings, ...values) => {
+      const query = strings.join(' ');
+      queries.push(query);
+      valuesSeen.push(...values);
+      if (query.includes('from app_users') && values.includes('admin-1')) {
+        return [{ discord_user_id: 'admin-1', game_name: 'Admin Florist', is_admin: true }];
+      }
+      if (query.includes('insert into flower_logs') && query.includes('assignment_level')) {
+        return Object.assign([{ id: 'flower-1' }, { id: 'flower-2' }, { id: 'flower-3' }], { count: 3 });
+      }
+      if (query.includes("discord_user_id not like 'cozy:%'") && values.includes('discord-user-1')) {
+        return [{ discord_user_id: 'discord-user-1', game_name: 'Rose Keeper' }];
+      }
+      if (query.includes("discord_user_id not like 'cozy:%'")) {
+        return [{ discord_user_id: 'discord-user-1', game_name: 'Rose Keeper' }];
+      }
+      if (query.includes('from flowers')) {
+        return [{ id: 'flower-1', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+      }
+
+      return [];
+    },
+  });
+  const res = mockResponse();
+
+  await handler(
+    request({
+      method: 'POST',
+      url: '/discord-users',
+      cookie: withAdminSession(),
+      body: new URLSearchParams({
+        action: 'log_by_level',
+        player_id: 'discord-user-1',
+        level: '4',
+      }).toString(),
+    }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Logged 3 assignment-level flowers for Rose Keeper/);
+  assert.match(res.body, /<option value="discord-user-1" selected>Rose Keeper<\/option>/);
+  assert.ok(queries.some((query) => query.includes('assignment_level <=')));
+  assert.ok(valuesSeen.includes(4));
 });
 
 test('discord users page deletes a non-admin player and cascaded flower data', async () => {
