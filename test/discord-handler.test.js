@@ -989,13 +989,12 @@ test('ownedby privately groups your logged flowers by rarity', async () => {
   assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
   assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
   assert.match(response.data.content, /Your logged flowers \(3\):/);
-  assert.equal(response.data.embeds.length, 3);
+  assert.match(response.data.content, /Panel 1\/3/);
+  assert.equal(response.data.embeds.length, 1);
   assert.equal(response.data.embeds[0].title, '<:N:1524529507942404186> logged flowers');
   assert.match(response.data.embeds[0].description, /Green Fern \(5 pts\)/);
-  assert.equal(response.data.embeds[1].title, '<:R:1524529635256307852> logged flowers');
-  assert.match(response.data.embeds[1].description, /Blue Rose \(22 pts \(\+2\)\)/);
-  assert.equal(response.data.embeds[2].title, '<:SSR:1524529771227381941> logged flowers');
-  assert.match(response.data.embeds[2].description, /Gold Lily \(80 pts\)/);
+  assert.equal(response.data.components[0].components[0].disabled, true);
+  assert.match(response.data.components[0].components[1].custom_id, /^ownedby:named-user:named-user:all:1$/);
 });
 
 test('ownedby can privately show a tagged user filtered by rarity', async () => {
@@ -1048,6 +1047,90 @@ test('ownedby can privately show a tagged user filtered by rarity', async () => 
   assert.match(response.data.embeds[0].description, /Blue Rose \(20 pts\)/);
   assert.match(response.data.embeds[0].description, /River Lily \(26 pts \(\+1\)\)/);
   assert.doesNotMatch(response.data.content, /target-user/);
+});
+
+test('ownedby can privately show a tagged user without a rarity filter', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'ownedby',
+        options: [{ name: 'player', value: 'target-user' }],
+        resolved: {
+          users: {
+            'target-user': {
+              username: 'discord_target',
+              global_name: 'Target Discord',
+            },
+          },
+        },
+      },
+    },
+    {
+      sql: async (strings, ...values) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users') && values.includes('target-user')) {
+          return [{ game_name: 'Target Florist' }];
+        }
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flower_logs l')) {
+          return [
+            { name: 'Blue Rose', rarity: 'R', quest_points: 20, extra_points: 0 },
+            { name: 'Gold Lily', rarity: 'SSR', quest_points: 80, extra_points: 0 },
+          ];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Target Florist \(Target Discord\) logged flowers \(2\):/);
+  assert.match(response.data.content, /Panel 1\/2/);
+  assert.equal(response.data.embeds.length, 1);
+  assert.equal(response.data.embeds[0].title, '<:R:1524529635256307852> logged flowers');
+  assert.match(response.data.embeds[0].description, /Blue Rose \(20 pts\)/);
+  assert.match(response.data.components[0].components[1].custom_id, /^ownedby:named-user:target-user:all:1$/);
+});
+
+test('ownedby next button privately moves to the next rarity panel', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.MESSAGE_COMPONENT,
+      member: { user: { id: 'named-user' } },
+      data: {
+        custom_id: 'ownedby:named-user:target-user:all:1',
+      },
+    },
+    {
+      sql: async (strings, ...values) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users') && values.includes('target-user')) {
+          return [{ game_name: 'Target Florist' }];
+        }
+        if (query.includes('from flower_logs l')) {
+          return [
+            { name: 'Blue Rose', rarity: 'R', quest_points: 20, extra_points: 0 },
+            { name: 'Gold Lily', rarity: 'SSR', quest_points: 80, extra_points: 0 },
+          ];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.UPDATE_MESSAGE);
+  assert.match(response.data.content, /Target Florist \(<@target-user>\) logged flowers \(2\):/);
+  assert.match(response.data.content, /Panel 2\/2/);
+  assert.equal(response.data.embeds[0].title, '<:SSR:1524529771227381941> logged flowers');
+  assert.match(response.data.embeds[0].description, /Gold Lily \(80 pts\)/);
+  assert.equal(response.data.components[0].components[1].disabled, true);
 });
 
 test('cozyplayers lists only Cozy players with pinned flowers grouped underneath', async () => {
