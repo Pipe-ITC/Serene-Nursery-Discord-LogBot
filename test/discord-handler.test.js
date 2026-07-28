@@ -960,6 +960,96 @@ test('pinned user output uses a display name instead of a raw Discord id', async
   assert.doesNotMatch(response.data.embeds[0].title, /target-user/);
 });
 
+test('ownedby privately groups your logged flowers by rarity', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: { name: 'ownedby' },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flower_logs l')) {
+          return [
+            { name: 'Green Fern', rarity: 'N', quest_points: 5, extra_points: 0 },
+            { name: 'Blue Rose', rarity: 'R', quest_points: 20, extra_points: 2 },
+            { name: 'Gold Lily', rarity: 'SSR', quest_points: 80, extra_points: 0 },
+          ];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Your logged flowers \(3\):/);
+  assert.equal(response.data.embeds.length, 3);
+  assert.equal(response.data.embeds[0].title, '<:N:1524529507942404186> logged flowers');
+  assert.match(response.data.embeds[0].description, /Green Fern \(5 pts\)/);
+  assert.equal(response.data.embeds[1].title, '<:R:1524529635256307852> logged flowers');
+  assert.match(response.data.embeds[1].description, /Blue Rose \(22 pts \(\+2\)\)/);
+  assert.equal(response.data.embeds[2].title, '<:SSR:1524529771227381941> logged flowers');
+  assert.match(response.data.embeds[2].description, /Gold Lily \(80 pts\)/);
+});
+
+test('ownedby can privately show a tagged user filtered by rarity', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'ownedby',
+        options: [
+          { name: 'player', value: 'target-user' },
+          { name: 'rarity', value: 'R' },
+        ],
+        resolved: {
+          users: {
+            'target-user': {
+              username: 'discord_target',
+              global_name: 'Target Discord',
+            },
+          },
+        },
+      },
+    },
+    {
+      sql: async (strings, ...values) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users') && values.includes('target-user')) {
+          return [{ game_name: 'Target Florist' }];
+        }
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flower_logs l')) {
+          return [
+            { name: 'Blue Rose', rarity: 'R', quest_points: 20, extra_points: 0 },
+            { name: 'River Lily', rarity: 'R', quest_points: 25, extra_points: 1 },
+          ];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Target Florist \(Target Discord\) logged flowers <:R:1524529635256307852> \(2\):/);
+  assert.equal(response.data.embeds.length, 1);
+  assert.equal(response.data.embeds[0].title, '<:R:1524529635256307852> logged flowers');
+  assert.match(response.data.embeds[0].description, /Blue Rose \(20 pts\)/);
+  assert.match(response.data.embeds[0].description, /River Lily \(26 pts \(\+1\)\)/);
+  assert.doesNotMatch(response.data.content, /target-user/);
+});
+
 test('cozyplayers lists only Cozy players with pinned flowers grouped underneath', async () => {
   const response = await handleInteraction(
     {
