@@ -218,6 +218,122 @@ test('log returns the standard private message when the flower has already been 
   assert.match(response.data.content, /Total for you: 21/);
 });
 
+test('log treats N assignment flowers as level fanfare logging', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'level-user' } },
+      data: {
+        name: 'log',
+        options: [{ name: 'flower', value: 'level-flower-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Level Legend' }];
+        }
+        if (query.includes('insert into flower_logs')) {
+          const result = [{ id: 'log-1' }, { id: 'log-2' }, { id: 'log-3' }];
+          result.count = 3;
+          return result;
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'level-flower-id', name: 'Level 42 Marker', rarity: 'N', quest_points: 0, assignment_level: 42 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.equal(response.data.content, 'FANFARE!');
+  assert.equal(response.data.embeds[0].image.url, 'https://bot.serenenursery.pipeitc.dev/Levelled-Up_Embed.png');
+  assert.match(response.data.embeds[1].description, /level 42/);
+  assert.match(response.data.embeds[1].description, /3 assignment-level flowers logged in one glorious burst/);
+  assert.ok(queries.some((query) => query.includes('assignment_level <=')));
+  assert.equal(queries.some((query) => query.includes('count(*)') && query.includes('from flower_logs')), false);
+});
+
+test('log can repair missing assignment flowers when the N flower is already logged', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'level-user' } },
+      data: {
+        name: 'log',
+        options: [{ name: 'flower', value: 'level-flower-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Level Legend' }];
+        }
+        if (query.includes('insert into flower_logs')) {
+          const result = [{ id: 'missing-log' }];
+          result.count = 1;
+          return result;
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'level-flower-id', name: 'Level 10 Marker', rarity: 'N', quest_points: 0, assignment_level: 10 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.embeds[1].description, /level 10/);
+  assert.match(response.data.embeds[1].description, /1 assignment-level flower logged in one glorious burst/);
+  assert.equal(queries.some((query) => query.includes('select extra_points') && query.includes('from flower_logs')), false);
+});
+
+test('log privately reports when all assignment flowers are already logged', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'level-user' } },
+      data: {
+        name: 'log',
+        options: [{ name: 'flower', value: 'level-flower-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Level Legend' }];
+        }
+        if (query.includes('insert into flower_logs')) {
+          const result = [];
+          result.count = 0;
+          return result;
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'level-flower-id', name: 'Level 5 Marker', rarity: 'N', quest_points: 0, assignment_level: 5 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /already have all assignment-level flowers up to level 5/);
+});
+
 test('log warns when the flower has already been logged', async () => {
   const queries = [];
   const response = await handleInteraction(
