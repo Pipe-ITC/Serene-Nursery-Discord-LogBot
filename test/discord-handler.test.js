@@ -218,6 +218,122 @@ test('log returns the standard private message when the flower has already been 
   assert.match(response.data.content, /Total for you: 21/);
 });
 
+test('log treats N assignment flowers as level fanfare logging', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'level-user' } },
+      data: {
+        name: 'log',
+        options: [{ name: 'flower', value: 'level-flower-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Level Legend' }];
+        }
+        if (query.includes('insert into flower_logs')) {
+          const result = [{ id: 'log-1' }, { id: 'log-2' }, { id: 'log-3' }];
+          result.count = 3;
+          return result;
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'level-flower-id', name: 'Level 42 Marker', rarity: 'N', quest_points: 0, assignment_level: 42 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.equal(response.data.content, 'FANFARE!');
+  assert.equal(response.data.embeds[0].image.url, 'https://bot.serenenursery.pipeitc.dev/Levelled-Up_Embed.png');
+  assert.match(response.data.embeds[1].description, /level 42/);
+  assert.match(response.data.embeds[1].description, /3 assignment-level flowers logged in one glorious burst/);
+  assert.ok(queries.some((query) => query.includes('assignment_level <=')));
+  assert.equal(queries.some((query) => query.includes('count(*)') && query.includes('from flower_logs')), false);
+});
+
+test('log can repair missing assignment flowers when the N flower is already logged', async () => {
+  const queries = [];
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'level-user' } },
+      data: {
+        name: 'log',
+        options: [{ name: 'flower', value: 'level-flower-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Level Legend' }];
+        }
+        if (query.includes('insert into flower_logs')) {
+          const result = [{ id: 'missing-log' }];
+          result.count = 1;
+          return result;
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'level-flower-id', name: 'Level 10 Marker', rarity: 'N', quest_points: 0, assignment_level: 10 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, undefined);
+  assert.match(response.data.embeds[1].description, /level 10/);
+  assert.match(response.data.embeds[1].description, /1 assignment-level flower logged in one glorious burst/);
+  assert.equal(queries.some((query) => query.includes('select extra_points') && query.includes('from flower_logs')), false);
+});
+
+test('log privately reports when all assignment flowers are already logged', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'level-user' } },
+      data: {
+        name: 'log',
+        options: [{ name: 'flower', value: 'level-flower-id' }],
+      },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Level Legend' }];
+        }
+        if (query.includes('insert into flower_logs')) {
+          const result = [];
+          result.count = 0;
+          return result;
+        }
+        if (query.includes('from flowers')) {
+          return [{ id: 'level-flower-id', name: 'Level 5 Marker', rarity: 'N', quest_points: 0, assignment_level: 5 }];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /already have all assignment-level flowers up to level 5/);
+});
+
 test('log warns when the flower has already been logged', async () => {
   const queries = [];
   const response = await handleInteraction(
@@ -958,6 +1074,179 @@ test('pinned user output uses a display name instead of a raw Discord id', async
   assert.equal(response.data.embeds[0].title, 'Target Florist (Target Discord) pinned flowers');
   assert.doesNotMatch(response.data.content, /target-user/);
   assert.doesNotMatch(response.data.embeds[0].title, /target-user/);
+});
+
+test('ownedby privately groups your logged flowers by rarity', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: { name: 'ownedby' },
+    },
+    {
+      sql: async (strings) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flower_logs l')) {
+          return [
+            { name: 'Green Fern', rarity: 'N', quest_points: 5, extra_points: 0 },
+            { name: 'Blue Rose', rarity: 'R', quest_points: 20, extra_points: 2 },
+            { name: 'Gold Lily', rarity: 'SSR', quest_points: 80, extra_points: 0 },
+          ];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Your logged flowers \(3\):/);
+  assert.match(response.data.content, /Panel 1\/3/);
+  assert.equal(response.data.embeds.length, 1);
+  assert.equal(response.data.embeds[0].title, '<:N:1524529507942404186> logged flowers');
+  assert.match(response.data.embeds[0].description, /Green Fern \(5 pts\)/);
+  assert.equal(response.data.components[0].components[0].disabled, true);
+  assert.match(response.data.components[0].components[1].custom_id, /^ownedby:named-user:named-user:all:1$/);
+});
+
+test('ownedby can privately show a tagged user filtered by rarity', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'ownedby',
+        options: [
+          { name: 'player', value: 'target-user' },
+          { name: 'rarity', value: 'R' },
+        ],
+        resolved: {
+          users: {
+            'target-user': {
+              username: 'discord_target',
+              global_name: 'Target Discord',
+            },
+          },
+        },
+      },
+    },
+    {
+      sql: async (strings, ...values) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users') && values.includes('target-user')) {
+          return [{ game_name: 'Target Florist' }];
+        }
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flower_logs l')) {
+          return [
+            { name: 'Blue Rose', rarity: 'R', quest_points: 20, extra_points: 0 },
+            { name: 'River Lily', rarity: 'R', quest_points: 25, extra_points: 1 },
+          ];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Target Florist \(Target Discord\) logged flowers <:R:1524529635256307852> \(2\):/);
+  assert.equal(response.data.embeds.length, 1);
+  assert.equal(response.data.embeds[0].title, '<:R:1524529635256307852> logged flowers');
+  assert.match(response.data.embeds[0].description, /Blue Rose \(20 pts\)/);
+  assert.match(response.data.embeds[0].description, /River Lily \(26 pts \(\+1\)\)/);
+  assert.doesNotMatch(response.data.content, /target-user/);
+});
+
+test('ownedby can privately show a tagged user without a rarity filter', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      member: { user: { id: 'named-user' } },
+      data: {
+        name: 'ownedby',
+        options: [{ name: 'player', value: 'target-user' }],
+        resolved: {
+          users: {
+            'target-user': {
+              username: 'discord_target',
+              global_name: 'Target Discord',
+            },
+          },
+        },
+      },
+    },
+    {
+      sql: async (strings, ...values) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users') && values.includes('target-user')) {
+          return [{ game_name: 'Target Florist' }];
+        }
+        if (query.includes('from app_users')) {
+          return [{ game_name: 'Rose Keeper' }];
+        }
+        if (query.includes('from flower_logs l')) {
+          return [
+            { name: 'Blue Rose', rarity: 'R', quest_points: 20, extra_points: 0 },
+            { name: 'Gold Lily', rarity: 'SSR', quest_points: 80, extra_points: 0 },
+          ];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+  assert.equal(response.data.flags, MessageFlags.EPHEMERAL);
+  assert.match(response.data.content, /Target Florist \(Target Discord\) logged flowers \(2\):/);
+  assert.match(response.data.content, /Panel 1\/2/);
+  assert.equal(response.data.embeds.length, 1);
+  assert.equal(response.data.embeds[0].title, '<:R:1524529635256307852> logged flowers');
+  assert.match(response.data.embeds[0].description, /Blue Rose \(20 pts\)/);
+  assert.match(response.data.components[0].components[1].custom_id, /^ownedby:named-user:target-user:all:1$/);
+});
+
+test('ownedby next button privately moves to the next rarity panel', async () => {
+  const response = await handleInteraction(
+    {
+      type: InteractionType.MESSAGE_COMPONENT,
+      member: { user: { id: 'named-user' } },
+      data: {
+        custom_id: 'ownedby:named-user:target-user:all:1',
+      },
+    },
+    {
+      sql: async (strings, ...values) => {
+        const query = strings.join(' ');
+        if (query.includes('from app_users') && values.includes('target-user')) {
+          return [{ game_name: 'Target Florist' }];
+        }
+        if (query.includes('from flower_logs l')) {
+          return [
+            { name: 'Blue Rose', rarity: 'R', quest_points: 20, extra_points: 0 },
+            { name: 'Gold Lily', rarity: 'SSR', quest_points: 80, extra_points: 0 },
+          ];
+        }
+
+        return [];
+      },
+    },
+  );
+
+  assert.equal(response.type, InteractionResponseType.UPDATE_MESSAGE);
+  assert.match(response.data.content, /Target Florist \(<@target-user>\) logged flowers \(2\):/);
+  assert.match(response.data.content, /Panel 2\/2/);
+  assert.equal(response.data.embeds[0].title, '<:SSR:1524529771227381941> logged flowers');
+  assert.match(response.data.embeds[0].description, /Gold Lily \(80 pts\)/);
+  assert.equal(response.data.components[0].components[1].disabled, true);
 });
 
 test('cozyplayers lists only Cozy players with pinned flowers grouped underneath', async () => {
