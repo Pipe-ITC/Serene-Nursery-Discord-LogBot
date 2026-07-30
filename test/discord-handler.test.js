@@ -175,6 +175,48 @@ test('log announces first bloom when the first guild player logs a flower', asyn
   assert.ok(queries.some((query) => query.includes('insert into flower_logs')));
 });
 
+test('log first bloom can use production flashing star emoji from environment', async () => {
+  process.env.EMOJI_FLASHING_STAR = '1532473762744631447';
+
+  try {
+    const response = await handleInteraction(
+      {
+        type: InteractionType.APPLICATION_COMMAND,
+        member: { user: { id: 'named-user' } },
+        data: {
+          name: 'log',
+          options: [{ name: 'flower', value: 'flower-id' }],
+        },
+      },
+      {
+        sql: async (strings) => {
+          const query = strings.join(' ');
+          if (query.includes('from app_users')) {
+            return [{ game_name: 'Rose Keeper' }];
+          }
+          if (query.includes('from flowers')) {
+            return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+          }
+          if (query.includes('count(*)') && query.includes('from flower_logs')) {
+            return [{ count: 0 }];
+          }
+          if (query.includes('insert into flower_logs')) {
+            const result = [{ id: 'log-id' }];
+            result.count = 1;
+            return result;
+          }
+
+          return [];
+        },
+      },
+    );
+
+    assert.match(response.data.content, /^<a:flashing_stars:1532473762744631447> FIRST BLOOM! <a:flashing_stars:1532473762744631447>/);
+  } finally {
+    delete process.env.EMOJI_FLASHING_STAR;
+  }
+});
+
 test('log returns the standard private message when the flower has already been logged by the guild', async () => {
   const response = await handleInteraction(
     {
@@ -806,6 +848,43 @@ test('find combines pinned and logged users in priority order', async () => {
   assert.doesNotMatch(response.data.content, /📌 Pinned Extra Florist/);
   assert.doesNotMatch(response.data.content, /✅ Logged Florist/);
   assert.equal(response.data.content.match(/Pinned Extra Florist/g).length, 1);
+});
+
+test('find extra point status can use production flashing exclamation emoji from environment', async () => {
+  process.env.EMOJI_FLASHING_EXCLAMATION = '1532473703517126897';
+
+  try {
+    const response = await handleInteraction(
+      {
+        type: InteractionType.APPLICATION_COMMAND,
+        member: { user: { id: 'named-user' } },
+        data: {
+          name: 'find',
+          options: [{ name: 'flower', value: 'flower-id' }],
+        },
+      },
+      {
+        sql: async (strings) => {
+          const query = strings.join(' ');
+          if (query.includes('from app_users')) {
+            return [{ game_name: 'Rose Keeper' }];
+          }
+          if (query.includes('from flowers')) {
+            return [{ id: 'flower-id', name: 'Red Rose', rarity: 'R', quest_points: 20 }];
+          }
+          if (query.includes('from flower_logs')) {
+            return [{ discord_user_id: 'logged-extra-user', game_name: 'Logged Extra Florist', extra_points: 2 }];
+          }
+
+          return [];
+        },
+      },
+    );
+
+    assert.match(response.data.content, /<a:flashingexclamationemoji:1532473703517126897> Logged Extra Florist .*\+2/);
+  } finally {
+    delete process.env.EMOJI_FLASHING_EXCLAMATION;
+  }
 });
 
 test('find shows a grey tick for done users on pinned rows', async () => {
