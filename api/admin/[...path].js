@@ -233,6 +233,10 @@ function layout({ title, admin, body, notice }) {
     .notice { border-left: 4px solid #ff66c4; background: #2a2233; padding: 12px 14px; border-radius: 6px; margin-bottom: 18px; }
     .muted { color: #9ca3af; }
   </style>
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body class="${watermarkClass.trim()}">
   <header>
