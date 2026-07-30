@@ -25,6 +25,7 @@ Optional environment:
 Flags:
   --dry-run            Match files to flowers without uploading or updating rows
   --overwrite          Replace existing image_url values. Default only fills missing image_url rows
+  --keep-messages      Leave Discord upload messages in place after updating the database
   --help              Show this help
 
 Example:
@@ -89,6 +90,13 @@ function mimeType(filePath) {
   return 'image/png';
 }
 
+function canonicalAttachmentUrl(url) {
+  const parsed = new URL(url);
+  parsed.search = '';
+  parsed.hash = '';
+  return parsed.toString();
+}
+
 async function uploadImage({ botToken, channelId, filePath, flowerName }) {
   const body = new FormData();
   const bytes = await fs.readFile(filePath);
@@ -120,12 +128,45 @@ async function uploadImage({ botToken, channelId, filePath, flowerName }) {
       throw new Error(`Discord upload failed for ${flowerName}: ${response.status} ${JSON.stringify(payload)}`);
     }
 
+    const messageId = payload.id;
     const attachmentUrl = payload.attachments?.[0]?.url;
+    if (!messageId) {
+      throw new Error(`Discord response did not include a message ID for ${flowerName}.`);
+    }
     if (!attachmentUrl) {
       throw new Error(`Discord response did not include an attachment URL for ${flowerName}.`);
     }
 
-    return attachmentUrl;
+    return { attachmentUrl, messageId };
+  }
+}
+
+async function deleteMessage({ botToken, channelId, messageId }) {
+  for (;;) {
+    const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bot ${botToken}`,
+      },
+    });
+
+    if (response.status === 429) {
+      const retry = await response.json().catch(() => ({}));
+      const retryAfterMs = Math.ceil(Number(retry.retry_after ?? 1) * 1000);
+      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+      continue;
+    }
+
+    if (response.status === 404) {
+      return;
+    }
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(`Discord message delete failed for ${messageId}: ${response.status} ${JSON.stringify(payload)}`);
+    }
+
+    return;
   }
 }
 
@@ -139,6 +180,7 @@ async function main() {
 
   const dryRun = hasFlag('--dry-run');
   const overwrite = hasFlag('--overwrite');
+  const keepMessages = hasFlag('--keep-messages');
   const databaseUrl = requireEnv('DATABASE_URL');
   const botToken = dryRun ? process.env.DISCORD_BOT_TOKEN : requireEnv('DISCORD_BOT_TOKEN');
   const channelId = dryRun ? process.env.DISCORD_CHANNEL_ID : requireEnv('DISCORD_CHANNEL_ID');
@@ -176,6 +218,7 @@ async function main() {
       .slice(0, limit);
 
     const failed = [];
+    const deleteFailures = [];
     let updated = 0;
 
     for (const [index, flower] of matched.entries()) {
@@ -185,14 +228,35 @@ async function main() {
           continue;
         }
 
-        const url = await uploadImage({ botToken, channelId, filePath: flower.file, flowerName: flower.name });
+        const upload = await uploadImage({ botToken, channelId, filePath: flower.file, flowerName: flower.name });
+        const url = canonicalAttachmentUrl(upload.attachmentUrl);
         await sql`
           update flowers
           set image_url = ${url}
           where id = ${flower.id}
         `;
         updated += 1;
-        console.log(JSON.stringify({ status: 'updated', index: index + 1, total: matched.length, name: flower.name }));
+        if (!keepMessages) {
+          try {
+            await deleteMessage({ botToken, channelId, messageId: upload.messageId });
+          } catch (error) {
+            deleteFailures.push({ name: flower.name, messageId: upload.messageId, error: error.message });
+            console.error(JSON.stringify({
+              status: 'delete_failed',
+              name: flower.name,
+              messageId: upload.messageId,
+              error: error.message,
+            }));
+          }
+        }
+
+        console.log(JSON.stringify({
+          status: 'updated',
+          index: index + 1,
+          total: matched.length,
+          name: flower.name,
+          messageDeleted: !keepMessages,
+        }));
       } catch (error) {
         failed.push({ name: flower.name, error: error.message });
         console.error(JSON.stringify({ status: 'failed', name: flower.name, error: error.message }));
@@ -208,6 +272,7 @@ async function main() {
     console.log(JSON.stringify({
       dryRun,
       overwrite,
+      keepMessages,
       capturesDir,
       localImageFiles: files.length,
       uniqueLocalNames: imageByName.size,
@@ -215,11 +280,13 @@ async function main() {
       matchedFlowersToProcess: matched.length,
       updated,
       failed: failed.length,
+      deleteFailures: deleteFailures.length,
       remainingMissingImageUrls: remainingMissing.count,
       failures: failed,
+      messageDeleteFailures: deleteFailures,
     }, null, 2));
 
-    if (failed.length > 0) {
+    if (failed.length > 0 || deleteFailures.length > 0) {
       process.exitCode = 1;
     }
   } finally {
